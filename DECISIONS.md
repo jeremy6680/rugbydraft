@@ -324,3 +324,28 @@
 **Rationale:** Standard PostgreSQL pattern for circular references. Clean, readable, no workaround needed.
 
 **Consequences:** Migration order must be respected. The `ALTER TABLE` must come after `leagues` creation in every future migration that recreates these tables.
+
+---
+
+## D-015 — RLS requires both GRANT and policies (Supabase)
+
+**Date:** 2026-03-18
+**Status:** Accepted
+
+**Context:** During RLS testing, all authenticated queries returned `permission denied`
+despite correct RLS policies being in place.
+
+**Finding:** PostgreSQL enforces two independent access control layers:
+
+1. `GRANT` — controls whether a role can access the table at all.
+2. RLS policies — control which rows that role can see.
+
+Without `GRANT SELECT` on a table, RLS policies never evaluate — the query
+fails at the permission check. Both layers are required.
+
+**Decision:** All tables have explicit `GRANT` statements for the `authenticated`
+and `service_role` roles. `fantasy_scores_staging` intentionally has no grant
+for `authenticated` — `permission denied` is the correct behaviour for clients.
+
+**Consequences:** Any new table added to the schema requires both an RLS policy
+AND a `GRANT` statement. This is documented as a checklist item for future migrations.

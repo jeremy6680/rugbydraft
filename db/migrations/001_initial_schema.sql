@@ -1027,5 +1027,294 @@ COMMENT ON FUNCTION handle_new_user IS 'Creates public.users profile on Supabase
 
 
 -- =============================================================================
+-- SECURITY DEFINER HELPER FUNCTIONS
+-- =============================================================================
+-- These functions break circular RLS dependencies between leagues and
+-- league_members. Without SECURITY DEFINER, policies that subquery
+-- league_members from within a leagues policy (and vice versa) cause
+-- infinite recursion.
+-- SECURITY DEFINER = runs as function owner (postgres), bypassing RLS.
+-- This is the standard Supabase pattern for this problem.
+-- =============================================================================
+
+CREATE OR REPLACE FUNCTION get_my_league_ids()
+RETURNS SETOF UUID
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+AS $$
+    SELECT league_id
+    FROM league_members
+    WHERE user_id = auth.uid();
+$$;
+
+CREATE OR REPLACE FUNCTION get_my_member_ids()
+RETURNS SETOF UUID
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+AS $$
+    SELECT id
+    FROM league_members
+    WHERE user_id = auth.uid();
+$$;
+
+COMMENT ON FUNCTION get_my_league_ids IS
+    'Returns league IDs the current user belongs to. SECURITY DEFINER bypasses RLS to avoid circular policy recursion.';
+
+COMMENT ON FUNCTION get_my_member_ids IS
+    'Returns league_member IDs for the current user. SECURITY DEFINER bypasses RLS to avoid circular policy recursion.';
+
+
+-- =============================================================================
+-- RLS POLICIES (corrected — replaces naive subquery versions above)
+-- =============================================================================
+-- Drop the recursive policies created earlier in this file and recreate them
+-- using the SECURITY DEFINER helpers.
+-- =============================================================================
+
+-- LEAGUES
+DROP POLICY IF EXISTS "League members can read their leagues" ON leagues;
+CREATE POLICY "League members can read their leagues"
+    ON leagues FOR SELECT
+    TO authenticated
+    USING (
+        id IN (SELECT get_my_league_ids())
+        OR commissioner_id = auth.uid()
+    );
+
+-- LEAGUE MEMBERS
+DROP POLICY IF EXISTS "League members can read all members of their leagues" ON league_members;
+CREATE POLICY "League members can read all members of their leagues"
+    ON league_members FOR SELECT
+    TO authenticated
+    USING (
+        league_id IN (SELECT get_my_league_ids())
+    );
+
+-- LEAGUE FIXTURES
+DROP POLICY IF EXISTS "League members can read fixtures of their leagues" ON league_fixtures;
+CREATE POLICY "League members can read fixtures of their leagues"
+    ON league_fixtures FOR SELECT
+    TO authenticated
+    USING (
+        league_id IN (SELECT get_my_league_ids())
+    );
+
+-- DRAFTS
+DROP POLICY IF EXISTS "League members can read their draft" ON drafts;
+CREATE POLICY "League members can read their draft"
+    ON drafts FOR SELECT
+    TO authenticated
+    USING (
+        league_id IN (SELECT get_my_league_ids())
+    );
+
+-- DRAFT PICKS
+DROP POLICY IF EXISTS "League members can read draft picks of their draft" ON draft_picks;
+CREATE POLICY "League members can read draft picks of their draft"
+    ON draft_picks FOR SELECT
+    TO authenticated
+    USING (
+        draft_id IN (
+            SELECT id FROM drafts
+            WHERE league_id IN (SELECT get_my_league_ids())
+        )
+    );
+
+-- ROSTERS
+DROP POLICY IF EXISTS "League members can read all rosters in their league" ON rosters;
+CREATE POLICY "League members can read all rosters in their league"
+    ON rosters FOR SELECT
+    TO authenticated
+    USING (
+        league_id IN (SELECT get_my_league_ids())
+    );
+
+-- ROSTER SLOTS
+DROP POLICY IF EXISTS "League members can read roster slots in their league" ON roster_slots;
+CREATE POLICY "League members can read roster slots in their league"
+    ON roster_slots FOR SELECT
+    TO authenticated
+    USING (
+        roster_id IN (
+            SELECT id FROM rosters
+            WHERE league_id IN (SELECT get_my_league_ids())
+        )
+    );
+
+-- WEEKLY LINEUPS
+DROP POLICY IF EXISTS "League members can read all lineups in their league" ON weekly_lineups;
+CREATE POLICY "League members can read all lineups in their league"
+    ON weekly_lineups FOR SELECT
+    TO authenticated
+    USING (
+        roster_id IN (
+            SELECT id FROM rosters
+            WHERE league_id IN (SELECT get_my_league_ids())
+        )
+    );
+
+DROP POLICY IF EXISTS "Manager can manage their own lineup" ON weekly_lineups;
+CREATE POLICY "Manager can manage their own lineup"
+    ON weekly_lineups FOR ALL
+    TO authenticated
+    USING (
+        roster_id IN (
+            SELECT r.id FROM rosters r
+            WHERE r.member_id IN (SELECT get_my_member_ids())
+        )
+    )
+    WITH CHECK (
+        roster_id IN (
+            SELECT r.id FROM rosters r
+            WHERE r.member_id IN (SELECT get_my_member_ids())
+        )
+    );
+
+-- WAIVERS
+DROP POLICY IF EXISTS "Manager can read own waivers" ON waivers;
+CREATE POLICY "Manager can read own waivers"
+    ON waivers FOR SELECT
+    TO authenticated
+    USING (
+        member_id IN (SELECT get_my_member_ids())
+    );
+
+DROP POLICY IF EXISTS "Manager can submit their own waivers" ON waivers;
+CREATE POLICY "Manager can submit their own waivers"
+    ON waivers FOR INSERT
+    TO authenticated
+    WITH CHECK (
+        member_id IN (SELECT get_my_member_ids())
+    );
+
+-- TRADES
+DROP POLICY IF EXISTS "Trade participants can read their trades" ON trades;
+CREATE POLICY "Trade participants can read their trades"
+    ON trades FOR SELECT
+    TO authenticated
+    USING (
+        proposer_id IN (SELECT get_my_member_ids())
+        OR receiver_id IN (SELECT get_my_member_ids())
+    );
+
+DROP POLICY IF EXISTS "Manager can propose trades" ON trades;
+CREATE POLICY "Manager can propose trades"
+    ON trades FOR INSERT
+    TO authenticated
+    WITH CHECK (
+        proposer_id IN (SELECT get_my_member_ids())
+    );
+
+-- TRADE PLAYERS
+DROP POLICY IF EXISTS "Trade participants can read trade players" ON trade_players;
+CREATE POLICY "Trade participants can read trade players"
+    ON trade_players FOR SELECT
+    TO authenticated
+    USING (
+        trade_id IN (
+            SELECT id FROM trades
+            WHERE proposer_id IN (SELECT get_my_member_ids())
+               OR receiver_id IN (SELECT get_my_member_ids())
+        )
+    );
+
+-- FANTASY SCORES
+DROP POLICY IF EXISTS "League members can read fantasy scores in their league" ON fantasy_scores;
+CREATE POLICY "League members can read fantasy scores in their league"
+    ON fantasy_scores FOR SELECT
+    TO authenticated
+    USING (
+        roster_id IN (
+            SELECT id FROM rosters
+            WHERE league_id IN (SELECT get_my_league_ids())
+        )
+    );
+
+-- LEAGUE STANDINGS
+DROP POLICY IF EXISTS "League members can read standings of their leagues" ON league_standings;
+CREATE POLICY "League members can read standings of their leagues"
+    ON league_standings FOR SELECT
+    TO authenticated
+    USING (
+        league_id IN (SELECT get_my_league_ids())
+    );
+
+-- LEAGUE ARCHIVES
+DROP POLICY IF EXISTS "Users can read archives of leagues they participated in" ON league_archives;
+CREATE POLICY "Users can read archives of leagues they participated in"
+    ON league_archives FOR SELECT
+    TO authenticated
+    USING (
+        league_id IN (SELECT get_my_league_ids())
+    );
+
+
+-- =============================================================================
+-- GRANTS
+-- =============================================================================
+-- RLS controls which ROWS a role can access.
+-- GRANT controls whether a role can access the TABLE at all.
+-- Both are required — GRANT without RLS = full table access,
+-- RLS without GRANT = permission denied before RLS even evaluates.
+-- =============================================================================
+
+-- Reference data: all authenticated users can read
+GRANT SELECT ON competitions TO authenticated;
+GRANT SELECT ON competition_rounds TO authenticated;
+GRANT SELECT ON real_matches TO authenticated;
+GRANT SELECT ON players TO authenticated;
+GRANT SELECT ON player_availability TO authenticated;
+
+-- User profiles: read and update own row only (RLS enforces)
+GRANT SELECT, UPDATE ON users TO authenticated;
+
+-- Leagues: members read, commissioner updates (RLS enforces)
+GRANT SELECT, INSERT, UPDATE ON leagues TO authenticated;
+
+-- League members: read only (FastAPI manages membership)
+GRANT SELECT ON league_members TO authenticated;
+
+-- League fixtures: read only
+GRANT SELECT ON league_fixtures TO authenticated;
+
+-- Drafts: read only (FastAPI manages draft state)
+GRANT SELECT ON drafts TO authenticated;
+
+-- Draft picks: read only (FastAPI writes via service_role)
+GRANT SELECT ON draft_picks TO authenticated;
+
+-- Rosters: read only (FastAPI builds rosters after draft)
+GRANT SELECT ON rosters TO authenticated;
+
+-- Roster slots: read only (FastAPI manages slot changes)
+GRANT SELECT ON roster_slots TO authenticated;
+
+-- Weekly lineups: managers read all, write their own (RLS enforces)
+GRANT SELECT, INSERT, UPDATE ON weekly_lineups TO authenticated;
+
+-- Waivers: managers read and submit their own (RLS enforces)
+GRANT SELECT, INSERT ON waivers TO authenticated;
+
+-- Trades: participants read, proposer inserts (RLS enforces)
+GRANT SELECT, INSERT, UPDATE ON trades TO authenticated;
+GRANT SELECT, INSERT ON trade_players TO authenticated;
+
+-- Fantasy scores: read only (pipeline writes via service_role)
+GRANT SELECT ON fantasy_scores TO authenticated;
+
+-- fantasy_scores_staging: NO grant to authenticated — service_role only
+-- (intentionally omitted — permission denied is the correct behaviour)
+
+-- Standings and archives: read only
+GRANT SELECT ON league_standings TO authenticated;
+GRANT SELECT ON league_archives TO authenticated;
+
+-- service_role: full access on all tables (bypasses RLS anyway)
+GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
+
+
+-- =============================================================================
 -- END OF MIGRATION
 -- =============================================================================

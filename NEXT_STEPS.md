@@ -61,7 +61,7 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 - [x] Write full PostgreSQL schema (all tables from CDC section 18)
 - [x] Enable Row Level Security on all tables
 - [x] Create initial migrations (plain SQL files in `db/migrations/`)
-- [ ] Test RLS policies: a user can only access their own league data
+- [x] Test RLS policies: a user can only access their own league data
 
 ### Data pipeline — Bronze/Silver
 

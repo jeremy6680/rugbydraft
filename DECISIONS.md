@@ -349,3 +349,42 @@ for `authenticated` — `permission denied` is the correct behaviour for clients
 
 **Consequences:** Any new table added to the schema requires both an RLS policy
 AND a `GRANT` statement. This is documented as a checklist item for future migrations.
+
+---
+
+## D-016 — Roster composition constraints: fixed in V1, configurable in V2
+
+**Date:** 2026-03-18
+**Status:** Accepted
+
+**Context:** The CDC defines maximum players per nation/club in a roster:
+
+- International competitions: maximum 8 players from the same nation
+- Club competitions: maximum 6 players from the same club
+
+The question was whether these limits should be fixed constants or
+configurable per league by the commissioner.
+
+**Options considered:**
+
+- A) Fixed constants — hardcoded in the draft engine validation logic
+- B) Configurable per league — stored as fields on the `leagues` table,
+  editable by the commissioner before the draft starts
+
+**Decision:** Option A in V1. Option B deferred to V2 if demand is confirmed.
+
+**Rationale:**
+
+- Configurable limits require additional DB fields, commissioner UI,
+  and draft engine logic that reads config instead of constants.
+- The majority of commissioners will never change these defaults.
+- V1 scope must stay focused — this is a nice-to-have, not a core feature.
+- Adding configurable limits in V2 is a non-breaking migration
+  (add columns with defaults matching the current hardcoded values).
+
+**Consequences:**
+
+- `MAX_PLAYERS_PER_NATION = 8` and `MAX_PLAYERS_PER_CLUB = 6` will be
+  defined as constants in the draft engine (Phase 2).
+- Validation happens in FastAPI at pick time — not in Pydantic models.
+- If a commissioner requests custom limits in beta feedback → implement in V2.

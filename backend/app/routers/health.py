@@ -58,9 +58,7 @@ async def _check_database() -> str:
     try:
         # Open a throwaway connection — not from the app pool
         conn = await asyncpg.connect(
-            dsn=settings.database_url.replace(
-                "postgresql+asyncpg://", "postgresql://"
-            )
+            dsn=settings.database_url.replace("postgresql+asyncpg://", "postgresql://")
         )
         await conn.execute("SELECT 1")
         await conn.close()

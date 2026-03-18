@@ -79,7 +79,7 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 - [x] FastAPI project init
 - [x] Supabase Auth integration (JWT verification middleware)
 - [x] Basic health endpoint `GET /health`
-- [ ] Pydantic models for core entities (Player, League, User)
+- [x] Pydantic models for core entities (Player, League, User)
 - [x] Rate limiting with slowapi (100 req/min per IP)
 
 ### Frontend skeleton

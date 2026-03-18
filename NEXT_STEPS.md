@@ -37,7 +37,7 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ---
 
-## 🔴 Phase 1 — Foundations (start now)
+## 🟡 Phase 1 — Foundations (in progress)
 
 **Estimated duration:** 2–3 weeks
 **Objective:** Project skeleton, database schema, data pipeline up to silver layer, CI/CD, i18n structure.
@@ -46,13 +46,14 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ### Repositories & structure
 
-- [ ] Create public repo `jeremy6680/rugbydraft`
-- [ ] Create private repo `jeremy6680/rugbydraft-private`
-- [ ] Set up folder structure (see `STRUCTURE.md` once created)
-- [ ] Add `.gitignore` — include `docs/cdc*.md`, `docs/cdc*.docx`, `.env*`
-- [ ] Copy `CONTEXT.md`, `DECISIONS.md`, `NEXT_STEPS.md` to repo root
-- [ ] Create `STRUCTURE.md`
-- [ ] Create `.env.example` with all required variables documented
+- [x] Create public repo `jeremy6680/rugbydraft`
+- [x] Set up folder structure
+- [x] Add `.gitignore` — includes `docs/cdc*.md`, `docs/cdc*.docx`, `.env*`
+- [x] Copy `CONTEXT.md`, `DECISIONS.md`, `NEXT_STEPS.md` to repo root
+- [x] Create `STRUCTURE.md`
+- [x] Create `.env.example` with all required variables documented
+- [x] Update `README.md` — public description, no mention of business model or Staff IA
+- [ ] Create private repo `jeremy6680/rugbydraft-private` — Phase 5, not needed yet
 
 ### Database (Supabase)
 
@@ -297,5 +298,6 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 ## Immediate next actions
 
 **→ Phase 0 (parallel):** await responses from Statscore and DSG. If no affordable provider confirmed within 1 week, activate Sportradar 30-day free trial.
-
-**→ Phase 1 (start now):** open a new conversation and begin with repo creation and PostgreSQL schema. The data source uncertainty does not block this.
+**PostgreSQL schema** — `db/migrations/001_initial_schema.sql`
+**Supabase project** — create project, run migration, test RLS
+**Backend skeleton** — FastAPI + requirements.txt + health endpoint

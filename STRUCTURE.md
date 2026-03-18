@@ -95,7 +95,7 @@ Plain SQL migration files for PostgreSQL (Supabase).
 ```
 db/
 └── migrations/
-    └── 001_initial_schema.sql   # Full schema — all tables from CDC section 18
+    └── 001_initial_schema.sql   # Full PostgreSQL schema: 21 tables, enums, RLS policies, indexes, triggers.
                                  # Includes RLS policies on all tables
 ```
 

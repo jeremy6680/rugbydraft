@@ -287,3 +287,40 @@
 - Phase 1 connector implementation will build `BaseRugbyConnector` + a mock/stub implementation for testing.
 - `connectors/api_sports.py` may still be implemented for fixture fetching (schedule, match status) if the chosen provider doesn't cover this use case cheaply.
 - CDC v3.1 cost estimates will need revision once a provider is confirmed.
+
+---
+
+## D-013 — `number_8` as distinct position type from `flanker`
+
+**Date:** 2026-03-18
+**Status:** Accepted
+
+**Context:** The CDC defines "3 third-row forwards" without distinguishing number 8 from flankers. In rugby, the number 8 is structurally distinct from flankers in terms of physical profile and, in some scoring systems, role-specific stats.
+
+**Decision:** `position_type` enum separates `number_8` from `flanker`. This gives full positional granularity from day one.
+
+**Rationale:**
+
+- Roster constraint validation is more precise (can enforce "at least 1 number 8 on bench" if needed in V2).
+- No cost: the extra enum value has zero impact on application logic.
+- Reversible: merging back into a generic `back_row` type is a simple migration if needed.
+
+**Consequences:**
+
+- Player data must assign positions correctly: flankers get `flanker`, the number 8 gets `number_8`.
+- The mock connector must respect this distinction in fixture data.
+
+---
+
+## D-014 — Circular FK between `users` and `leagues` resolved via ALTER TABLE
+
+**Date:** 2026-03-18
+**Status:** Accepted
+
+**Context:** `users.ai_league_id` references `leagues`, but `leagues.commissioner_id` references `users`. Neither table can be created first with both FK constraints.
+
+**Decision:** Create `users` first without the `ai_league_id` FK, create `leagues`, then add the FK with `ALTER TABLE users ADD CONSTRAINT ...`.
+
+**Rationale:** Standard PostgreSQL pattern for circular references. Clean, readable, no workaround needed.
+
+**Consequences:** Migration order must be respected. The `ALTER TABLE` must come after `leagues` creation in every future migration that recreates these tables.

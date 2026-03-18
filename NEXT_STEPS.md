@@ -65,13 +65,13 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ### Data pipeline — Bronze/Silver
 
-- [ ] Implement `connectors/base.py` — `BaseRugbyConnector` ABC
-- [ ] Implement `connectors/mock.py` — stub connector returning fixture data for testing
-- [ ] Set `RUGBY_DATA_SOURCE=mock` in `.env.example` (updated to real provider once confirmed)
-- [ ] dbt project init (`dbt init rugbydraft`)
-- [ ] Bronze models: `raw_matches`, `raw_player_stats`, `raw_fixtures`, `raw_player_availability`
-- [ ] Silver models: `stg_players`, `stg_matches`, `stg_match_stats`, `stg_fixtures`, `stg_player_availability`
-- [ ] dbt tests on silver models (not_null, unique on key fields)
+- [x] Implement `connectors/base.py` — `BaseRugbyConnector` ABC
+- [x] Implement `connectors/mock.py` — stub connector returning fixture data for testing
+- [x] Set `RUGBY_DATA_SOURCE=mock` in `.env.example` (updated to real provider once confirmed)
+- [x] dbt project init (`dbt init rugbydraft`)
+- [x] Bronze models: `raw_matches`, `raw_player_stats`, `raw_fixtures`, `raw_player_availability`
+- [x] Silver models: `stg_players`, `stg_matches`, `stg_match_stats`, `stg_fixtures`, `stg_player_availability`
+- [x] dbt tests on silver models (not_null, unique on key fields)
 - [ ] Cron Coolify: `daily_fixtures` (06:00) and `daily_availability` (08:00)
 
 ### Backend skeleton
@@ -297,5 +297,6 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 
 ## Immediate next actions
 
-**→ Phase 0 (parallel):** await responses from Statscore and DSG. If no affordable provider confirmed within 1 week, activate Sportradar 30-day free trial.
-**→ Phase 1 — next step: Data pipeline** — `connectors/base.py` (BaseRugbyConnector ABC) + `connectors/mock.py` + dbt project init + bronze/silver models.
+**→ Phase 0 (parallel):** await responses from Statscore and DSG.
+**→ Phase 1 — next step: Frontend skeleton** — Next.js 15, next-intl, shadcn/ui, Supabase Auth UI.
+**→ Phase 1 — remaining:** CI/CD (GitHub Actions), Cron Coolify config (after deploy).

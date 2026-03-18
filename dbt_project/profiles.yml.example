@@ -1,0 +1,24 @@
+# profiles.yml.example — Connection profile template for RugbyDraft dbt project
+#
+# USAGE:
+#   1. Copy this file: cp profiles.yml.example ~/.dbt/profiles.yml
+#   2. Update the database path to match your local setup
+#   3. Never commit profiles.yml — it is gitignored
+#
+# DuckDB stores all data in a single local file (like SQLite).
+# The pipeline writes JSON → DuckDB, then dbt transforms bronze → silver → gold.
+
+rugbydraft:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      # Path to your local DuckDB database file.
+      # Created automatically on first run if it does not exist.
+      path: "{{ env_var('DUCKDB_PATH', '../data/rugbydraft.duckdb') }}"
+      threads: 4
+
+    prod:
+      type: duckdb
+      path: "{{ env_var('DUCKDB_PATH') }}"
+      threads: 4

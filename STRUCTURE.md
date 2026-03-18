@@ -123,32 +123,44 @@ dbt Core data pipeline. Medallion architecture: bronze → silver → gold.
 ```
 dbt_project/
 ├── models/
-│   ├── bronze/            # Raw data as ingested — no transformation
-│   │   ├── raw_matches.sql
-│   │   ├── raw_player_stats.sql
-│   │   ├── raw_fixtures.sql
-│   │   └── raw_player_availability.sql
-│   └── silver/            # Cleaned, typed, validated data
-│       ├── stg_players.sql
-│       ├── stg_matches.sql
-│       ├── stg_match_stats.sql
-│       ├── stg_fixtures.sql
-│       └── stg_player_availability.sql
+│   ├── bronze/            # Raw data as ingested — no transformation, views
+│   │   ├── raw_matches.sql             # Completed match results
+│   │   ├── raw_player_stats.sql        # Individual player stats per match
+│   │   ├── raw_fixtures.sql            # Upcoming and recent fixtures
+│   │   └── raw_player_availability.sql # Player injury/suspension status
+│   └── silver/            # Cleaned, typed, validated data — tables
+│       ├── stg_players.sql             # Player reference data
+│       ├── stg_matches.sql             # Finished matches only
+│       ├── stg_match_stats.sql         # Stats with COALESCE on conditional fields
+│       ├── stg_fixtures.sql            # All fixtures, canonical column names
+│       └── stg_player_availability.sql # Availability with typed fields
 │   # gold/ — added in Phase 3 (fantasy points, leaderboard, player value)
-├── tests/                 # dbt schema tests (not_null, unique, relationships)
+├── tests/                 # dbt schema tests (not_null, unique, accepted_values)
+├── models/schema.yml      # Test definitions for bronze and silver layers
 ├── dbt_project.yml        # dbt project configuration
 └── profiles.yml.example   # Connection profile template (never commit profiles.yml)
 ```
 
 ### Medallion layers
 
-| Layer  | Purpose                                   | Engine              |
-| ------ | ----------------------------------------- | ------------------- |
-| Bronze | Raw data from connector, stored as-is     | DuckDB (batch)      |
-| Silver | Cleaned, typed, deduplicated              | DuckDB (batch)      |
-| Gold   | Fantasy points, leaderboard, player value | DuckDB → PostgreSQL |
+| Layer  | Purpose                                   | Materialized | Engine              |
+| ------ | ----------------------------------------- | ------------ | ------------------- |
+| Bronze | Raw data from connector, stored as-is     | Views        | DuckDB              |
+| Silver | Cleaned, typed, deduplicated              | Tables       | DuckDB              |
+| Gold   | Fantasy points, leaderboard, player value | Tables       | DuckDB → PostgreSQL |
 
 Gold layer is added in Phase 3 once the data provider is confirmed.
+
+### Ingestion script
+
+`scripts/ingest_mock.py` calls the active connector and writes JSON files
+to `data/raw/`. These files are the source for bronze models via `read_json_auto()`.
+
+Run order:
+
+1. `python3 scripts/ingest_mock.py` — fetch + write JSON
+2. `dbt run` (from `dbt_project/`) — bronze → silver transformation
+3. `dbt test` — validate silver layer
 
 ---
 

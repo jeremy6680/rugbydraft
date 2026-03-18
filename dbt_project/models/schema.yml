@@ -1,0 +1,122 @@
+# schema.yml — dbt tests for bronze and silver models
+#
+# Tests run in CI (ci-dbt.yml GitHub Action) — PRs blocked if failing
+# Coverage: not_null on key identifiers, unique on primary keys
+
+version: 2
+
+models:
+  # --- Bronze layer ---
+  - name: raw_fixtures
+    description: "Raw fixtures as ingested from rugby data connector"
+    columns:
+      - name: external_id
+        tests:
+          - not_null
+      - name: competition_id
+        tests:
+          - not_null
+      - name: status
+        tests:
+          - not_null
+
+  - name: raw_matches
+    description: "Raw completed match results"
+    columns:
+      - name: external_id
+        tests:
+          - not_null
+      - name: status
+        tests:
+          - not_null
+
+  - name: raw_player_stats
+    description: "Raw individual player statistics per match"
+    columns:
+      - name: external_match_id
+        tests:
+          - not_null
+      - name: external_player_id
+        tests:
+          - not_null
+
+  - name: raw_player_availability
+    description: "Raw player availability status"
+    columns:
+      - name: external_player_id
+        tests:
+          - not_null
+      - name: status
+        tests:
+          - not_null
+
+  # --- Silver layer ---
+  - name: stg_fixtures
+    description: "Cleaned and typed fixtures — canonical column names"
+    columns:
+      - name: fixture_external_id
+        tests:
+          - not_null
+          - unique
+      - name: competition_external_id
+        tests:
+          - not_null
+      - name: kickoff_utc
+        tests:
+          - not_null
+      - name: status
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                ["scheduled", "live", "finished", "postponed", "cancelled"]
+
+  - name: stg_matches
+    description: "Cleaned completed match results — finished matches only"
+    columns:
+      - name: match_external_id
+        tests:
+          - not_null
+          - unique
+      - name: status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["finished"]
+
+  - name: stg_players
+    description: "Player reference data extracted from match stats"
+    columns:
+      - name: player_external_id
+        tests:
+          - not_null
+          - unique
+      - name: player_name
+        tests:
+          - not_null
+      - name: team_external_id
+        tests:
+          - not_null
+
+  - name: stg_match_stats
+    description: "Individual player stats per match — COALESCE applied on conditional stats"
+    columns:
+      - name: match_external_id
+        tests:
+          - not_null
+      - name: player_external_id
+        tests:
+          - not_null
+
+  - name: stg_player_availability
+    description: "Player availability status — updated daily"
+    columns:
+      - name: player_external_id
+        tests:
+          - not_null
+          - unique
+      - name: availability_status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["fit", "injured", "suspended", "doubtful", "unavailable"]

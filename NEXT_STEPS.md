@@ -1,40 +1,48 @@
 # NEXT_STEPS.md — RugbyDraft
 
-> Current status: Pre-development — CDC v3.1 validated.
-> Last updated: 2026-03-16
+> Current status: Phase 0 complete (API-Sports ruled out). Provider search in progress. Phase 1 ready to start.
+> Last updated: 2026-03-18
 
 ---
 
-## 🔴 Phase 0 — API Validation (BLOCKING — do this first)
+## 🟡 Phase 0 — API Validation (in progress)
 
-**Estimated duration:** 3–5 days
-**Objective:** Validate that API-Sports Standard provides the stats required by the scoring system before writing a single line of application code.
+**Status:** API-Sports tested and ruled out. Alternative providers under evaluation.
 
-### Steps
+### Completed
 
-- [ ] Subscribe to API-Sports Standard (~12 €/month)
-- [ ] Make manual requests on the current Six Nations:
-  - `GET /rugby/fixtures?league=...&season=2026` — verify match list and statuses
-  - `GET /rugby/fixtures/statistics?fixture=...` — verify available stat fields
-- [ ] Complete the validation checklist (DECISIONS.md D-005):
-  - [ ] Tackles per player
-  - [ ] Turnovers won per player
-  - [ ] Metres carried per player
-  - [ ] Try assists per player
-  - [ ] Conversions / penalties (kicker stats)
-  - [ ] Yellow / red cards
-  - [ ] Penalties conceded per player
-  - [ ] Match status polling (live / finished) — test on a live match
-  - [ ] Conditional: 50/22, dominant tackle, lineout steal
-- [ ] Document findings in `docs/api_validation.md`
-- [ ] **Decision:** if blocking stats missing → revise scoring system. If only conditional stats missing → note in DECISIONS.md and proceed.
+- [x] Created free API-Sports account and obtained API key
+- [x] Built validation script (`scripts/validate_api.py`)
+- [x] Tested API-Sports Rugby on Six Nations 2024 season
+- [x] **Finding: API-Sports provides scores only — no player-level stats endpoint exists**
+- [x] Investigated alternative providers (Sportradar, DSG, Statscore, stats.sixnationsrugby.com)
+- [x] Contacted Data Sports Group (DSG) — 2026-03-18
+- [x] Contacted Statscore — 2026-03-18, received initial reply, sent detailed requirements
+
+### Pending — provider selection
+
+- [ ] Await DSG response with pricing and data sample
+- [ ] Await Statscore response confirming player-level stat availability
+- [ ] If budget is confirmed feasible: request sandbox/trial access and run validation script against new provider
+- [ ] If all providers exceed budget: evaluate Sportradar 30-day free trial + simplified scoring system as fallback
+- [ ] Document final provider decision in `DECISIONS.md` D-012
+- [ ] Update cost estimates in CDC if provider cost differs from original ~12 €/month assumption
+
+### Decision rule (unchanged)
+
+If blocking stats (tackles, turnovers, metres, try assists) are confirmed available → proceed to Phase 3 with full scoring system.
+If no affordable provider found → implement simplified scoring (tries, kicker stats, cards) on API-Sports and document the tradeoff in DECISIONS.md.
+
+**Phase 0 does NOT block Phase 1.** Repos, schema, CI/CD, frontend skeleton, and draft engine are all independent of the data source choice.
 
 ---
 
-## 🔴 Phase 1 — Foundations
+## 🔴 Phase 1 — Foundations (start now)
 
 **Estimated duration:** 2–3 weeks
 **Objective:** Project skeleton, database schema, data pipeline up to silver layer, CI/CD, i18n structure.
+
+> **Note on data pipeline:** implement `BaseRugbyConnector` + a mock connector for testing. Do NOT hardcode API-Sports as the only implementation. The real connector will be added once the provider is confirmed (before Phase 3).
 
 ### Repositories & structure
 
@@ -51,14 +59,14 @@
 - [ ] Create Supabase project
 - [ ] Write full PostgreSQL schema (all tables from CDC section 18)
 - [ ] Enable Row Level Security on all tables
-- [ ] Create initial migrations (Supabase migrations or plain SQL files in `db/migrations/`)
+- [ ] Create initial migrations (plain SQL files in `db/migrations/`)
 - [ ] Test RLS policies: a user can only access their own league data
 
 ### Data pipeline — Bronze/Silver
 
 - [ ] Implement `connectors/base.py` — `BaseRugbyConnector` ABC
-- [ ] Implement `connectors/api_sports.py` — API-Sports Standard
-- [ ] Set `RUGBY_DATA_SOURCE=api_sports` in `.env.example`
+- [ ] Implement `connectors/mock.py` — stub connector returning fixture data for testing
+- [ ] Set `RUGBY_DATA_SOURCE=mock` in `.env.example` (updated to real provider once confirmed)
 - [ ] dbt project init (`dbt init rugbydraft`)
 - [ ] Bronze models: `raw_matches`, `raw_player_stats`, `raw_fixtures`, `raw_player_availability`
 - [ ] Silver models: `stg_players`, `stg_matches`, `stg_match_stats`, `stg_fixtures`, `stg_player_availability`
@@ -145,7 +153,7 @@
 ## Phase 3 — Gameplay
 
 **Estimated duration:** 2–3 weeks
-**Prerequisite:** Phase 2 complete.
+**Prerequisite:** Phase 2 complete + data provider confirmed (D-012).
 
 ### Data pipeline — Gold
 
@@ -252,7 +260,7 @@
 **Estimated duration:** 2 weeks
 **Prerequisite:** Phase 5 complete.
 
-- [ ] Top 14 connector (API-Sports Standard — verify coverage first)
+- [ ] Top 14 connector (verify coverage with confirmed data provider first)
 - [ ] Pro plan gate on Top 14 leagues
 - [ ] Season archiving: `league_archives` table populated at end of competition
 - [ ] Full accessibility audit (axe-core + manual review)
@@ -265,11 +273,13 @@
 ## Future phases
 
 ### Phase 7 — EN (V2)
+
 - Translate `messages/en.json`
 - EN community outreach (Reddit rugby, Twitter)
 - Premiership + Super Rugby Pacific connectors
 
 ### Phase 8 — ES/IT (V3)
+
 - `messages/es.json` + `messages/it.json`
 - Super Rugby Americas connector
 - Italian Top 12 connector
@@ -284,8 +294,8 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 
 ---
 
-## Immediate next action
+## Immediate next actions
 
-**→ Validate API-Sports Standard on the current Six Nations (Phase 0).**
+**→ Phase 0 (parallel):** await responses from Statscore and DSG. If no affordable provider confirmed within 1 week, activate Sportradar 30-day free trial.
 
-Everything else depends on this. Do not set up repos, write schema, or install anything until the scoring system is confirmed feasible with the available data.
+**→ Phase 1 (start now):** open a new conversation and begin with repo creation and PostgreSQL schema. The data source uncertainty does not block this.

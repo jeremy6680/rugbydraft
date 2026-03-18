@@ -76,11 +76,11 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ### Backend skeleton
 
-- [ ] FastAPI project init
-- [ ] Supabase Auth integration (JWT verification middleware)
-- [ ] Basic health endpoint `GET /health`
+- [x] FastAPI project init
+- [x] Supabase Auth integration (JWT verification middleware)
+- [x] Basic health endpoint `GET /health`
 - [ ] Pydantic models for core entities (Player, League, User)
-- [ ] Rate limiting with slowapi (100 req/min per IP)
+- [x] Rate limiting with slowapi (100 req/min per IP)
 
 ### Frontend skeleton
 
@@ -298,6 +298,4 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 ## Immediate next actions
 
 **→ Phase 0 (parallel):** await responses from Statscore and DSG. If no affordable provider confirmed within 1 week, activate Sportradar 30-day free trial.
-**PostgreSQL schema** — `db/migrations/001_initial_schema.sql`
-**Supabase project** — create project, run migration, test RLS
 **Backend skeleton** — FastAPI + requirements.txt + health endpoint

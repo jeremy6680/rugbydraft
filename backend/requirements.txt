@@ -1,0 +1,26 @@
+# backend/requirements.txt
+# Production dependencies — pinned to minor version for reproducibility
+# Update with: pip install --upgrade <package> then re-pin
+
+# ── Web framework ────────────────────────────────────────────────────────────
+fastapi==0.115.12
+uvicorn[standard]==0.34.0
+
+# ── Settings & validation ────────────────────────────────────────────────────
+pydantic==2.11.1
+pydantic-settings==2.8.1
+
+# ── Authentication — JWT verification (Supabase Auth tokens) ─────────────────
+python-jose[cryptography]==3.5.0
+
+# ── Database — async PostgreSQL driver ───────────────────────────────────────
+asyncpg==0.30.0
+
+# ── HTTP client — async, used for external API calls and TestClient ───────────
+httpx==0.28.1
+
+# ── Rate limiting ────────────────────────────────────────────────────────────
+slowapi==0.1.9
+
+# ── Supabase SDK — Auth + Realtime (Phase 2) ─────────────────────────────────
+supabase==2.15.1

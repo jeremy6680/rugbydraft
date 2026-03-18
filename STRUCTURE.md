@@ -52,25 +52,39 @@ through FastAPI first, then are broadcast to clients.
 backend/
 ├── app/
 │   ├── main.py            # FastAPI app entrypoint — mounts routers, middleware
+│   │                      # CORS + SlowAPI + AuthMiddleware assembled here
 │   ├── config.py          # App settings loaded from environment variables
 │   │                      # via pydantic-settings. Never hardcode secrets.
 │   ├── middleware/
+│   │   ├── __init__.py
 │   │   └── auth.py        # JWT verification middleware (Supabase Auth tokens)
+│   │                      # Global opt-out model — all routes protected by default
+│   │                      # Public routes whitelisted in PUBLIC_PATHS
 │   ├── routers/
-│   │   └── health.py      # GET /health — liveness probe
-│   ├── models/            # Pydantic models for request/response validation
-│   │   ├── user.py        # User schema
-│   │   ├── player.py      # Player schema (includes positions[] multi-position)
-│   │   └── league.py      # League schema
-│   └── connectors/        # Rugby data source abstraction layer
-│       ├── base.py        # BaseRugbyConnector — abstract base class (ABC)
-│       └── mock.py        # MockRugbyConnector — stub returning fixture data
-│                          # Used during development until provider is confirmed
+│   │   ├── __init__.py
+│   │   └── health.py      # GET /health — liveness probe (public, no JWT)
+│   └── models/            # Pydantic models — to be completed in Phase 2
+│       ├── __init__.py
+│       ├── user.py
+│       ├── player.py
+│       └── league.py
 ├── tests/
-│   └── test_health.py     # Health endpoint smoke test
-├── requirements.txt       # Production dependencies
-└── requirements-dev.txt   # Dev dependencies (pytest, ruff, httpx...)
+│   ├── __init__.py
+│   └── test_health.py     # 8 tests — health endpoint + auth middleware
+├── pytest.ini             # pytest config — asyncio strict mode
+├── requirements.txt       # Production dependencies (pinned to minor version)
+└── requirements-dev.txt   # Dev/CI dependencies (pytest, ruff, mypy)
 ```
+
+### Key architectural notes
+
+- `config.py` uses `pydantic-settings` — missing required env vars cause
+  immediate startup failure with a clear error message.
+- `middleware/auth.py` is global opt-out — every route is protected unless
+  explicitly added to `PUBLIC_PATHS`.
+- `routers/health.py` returns HTTP 200 always — `status: degraded` when DB
+  is unreachable, so Coolify only restarts on total process failure.
+- Python 3.13 required — pydantic-core (Rust/PyO3) does not yet support 3.14.
 
 ### Connector architecture
 
@@ -90,14 +104,12 @@ See `DECISIONS.md` D-012 for the provider selection status.
 
 ## db/
 
-Plain SQL migration files for PostgreSQL (Supabase).
+Database migrations and tests.
 
-```
-db/
-└── migrations/
-    └── 001_initial_schema.sql   # Full PostgreSQL schema: 21 tables, enums, RLS policies, indexes, triggers.
-                                 # Includes RLS policies on all tables
-```
+| File                                | Description                                                                                  |
+| ----------------------------------- | -------------------------------------------------------------------------------------------- |
+| `migrations/001_initial_schema.sql` | Full PostgreSQL schema: 21 tables, enums, RLS policies, GRANT statements, indexes, triggers. |
+| `tests/test_rls_policies.sql`       | Manual RLS validation tests. Run in Supabase SQL Editor. Covers 7 isolation scenarios.       |
 
 Migrations are plain SQL files, applied manually via the Supabase SQL
 editor or psql. No ORM migration tool in V1 — keep it simple and explicit.

@@ -298,4 +298,4 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 ## Immediate next actions
 
 **→ Phase 0 (parallel):** await responses from Statscore and DSG. If no affordable provider confirmed within 1 week, activate Sportradar 30-day free trial.
-**Backend skeleton** — FastAPI + requirements.txt + health endpoint
+**→ Phase 1 — next step: Data pipeline** — `connectors/base.py` (BaseRugbyConnector ABC) + `connectors/mock.py` + dbt project init + bronze/silver models.

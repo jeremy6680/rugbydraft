@@ -110,7 +110,7 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 - [x] Snake draft order algorithm (N managers, 2N picks per cycle)
 - [x] Server-side timer (FastAPI manages countdown, not clients)
-- [ ] Pick validation: correct manager, correct turn, player available
+- [x] Pick validation: correct manager, correct turn, player available
 - [ ] Autodraft algorithm: pick from preference list, or by default value score
 - [ ] Timeout → auto-activate autodraft for remaining picks
 - [ ] "Manager never connected" → full autodraft from draft start

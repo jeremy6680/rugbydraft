@@ -69,20 +69,24 @@ backend/
 │       ├── player.py
 │       └── league.py
 ├── draft/
-│   ├── __init__.py        # Draft engine package marker
-│   ├── snake_order.py     # Pure snake draft order algorithm (no I/O)
-│   │                      # Functions: generate_snake_order, get_pick_owner,
-│   │                      # build_pick_slots, get_manager_picks
-│   └── timer.py           # Server-side pick countdown (asyncio.Task)
-│                          # DraftTimer: start(), cancel(), time_remaining
-│                          # on_expire callback triggers autodraft
+│   ├── __init__.py          # Draft engine package marker
+│   ├── snake_order.py       # Pure snake draft order algorithm (no I/O)
+│   │                        # Functions: generate_snake_order, get_pick_owner,
+│   │                        # build_pick_slots, get_manager_picks
+│   ├── timer.py             # Server-side pick countdown (asyncio.Task)
+│   │                        # DraftTimer: start(), cancel(), time_remaining
+│   │                        # on_expire callback triggers autodraft
+│   └── validate_pick.py     # Pure pick validation — 3 layers, typed exceptions
+│                            # validate_pick(), RosterSnapshot, PickValidationError
+│                            # Constants: ROSTER_SIZE=30, MAX_PER_NATION=8, MAX_PER_CLUB=6
 ├── tests/
 │   ├── __init__.py
 │   ├── test_health.py     # 8 tests — health endpoint + auth middleware
 │   └── draft/
-│       ├── __init__.py             # Draft tests package marker
-│       ├── test_snake_order.py     # 33 unit tests for snake_order.py
-│       └── test_timer.py           # 22 unit tests for timer.py (pytest-asyncio)
+│       ├── __init__.py              # Draft tests package marker
+│       ├── test_snake_order.py      # 33 unit tests for snake_order.py
+│       ├── test_timer.py            # 22 unit tests for timer.py (pytest-asyncio)
+│       └── test_validate_pick.py    # 17 unit tests for validate_pick.py
 ├── pytest.ini             # pytest config — asyncio strict mode
 ├── requirements.txt       # Production dependencies (pinned to minor version)
 └── requirements-dev.txt   # Dev/CI dependencies (pytest, ruff, mypy)

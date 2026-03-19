@@ -539,3 +539,46 @@ with 22 unit tests before any DraftEngine integration.
   state snapshot sent to reconnecting clients.
 
 ---
+
+## D-021 — Pick validation as a pure function with typed exceptions
+
+**Date:** 2026-03-19
+**Status:** Accepted
+
+**Context:** Pick validation is the guard layer between a manager's pick request
+and the DraftEngine accepting it. It must be reliable, explicit, and testable
+before being wired into FastAPI.
+
+**Decision:** `validate_pick()` in `backend/draft/validate_pick.py` — pure
+function, no I/O, typed exceptions per failure reason, tested with 17 unit tests.
+
+**Three validation layers (in order):**
+
+1. Turn validation — is it this manager's turn? (NotYourTurnError)
+2. Player availability — not drafted, not injured/suspended (PlayerAlreadyDraftedError, PlayerUnavailableError)
+3. Roster constraints — not full, nationality/club limits respected (RosterFullError, NationalityLimitError, ClubLimitError)
+
+**Rationale:**
+
+- Typed exceptions (one per failure reason) give the DraftEngine precise
+  control: each maps to a distinct HTTP 422 code + i18n key for the frontend.
+- The `.code` attribute on each exception is machine-readable — the frontend
+  uses it as a key for `messages/fr.json` error display.
+- Validation stops at the first failure — no need to collect all errors
+  in a draft context (the manager must fix one issue at a time).
+- A `RosterSnapshot` dataclass isolates the validation input from DB objects.
+
+**Bug found during tests:** `test_nationality_limit_not_applied_in_club` was
+constructing a roster with 8 players from the same club (exceeding MAX_PER_CLUB=6),
+causing a spurious ClubLimitError. Fixed by capping test clubs at MAX_PER_CLUB-1.
+Lesson: test fixtures must not violate unrelated constraints.
+
+**Consequences:**
+
+- The DraftEngine wraps `validate_pick()` in a try/except and maps each
+  exception type to the appropriate HTTP response + Realtime broadcast.
+- `RosterSnapshot` is built from the DraftState in memory — no DB query
+  needed at pick validation time.
+- Constants `MAX_PER_NATION=8` and `MAX_PER_CLUB=6` are defined here (D-016).
+
+---

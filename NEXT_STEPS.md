@@ -117,7 +117,7 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ### Realtime (Supabase Realtime as broadcast)
 
-- [ ] FastAPI broadcasts state updates to Supabase Realtime channel
+- [x] FastAPI broadcasts state updates to Supabase Realtime channel
 - [ ] Client subscribes to channel, renders state received from server
 - [ ] Never write draft state directly from client to DB
 

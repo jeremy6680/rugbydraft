@@ -2,7 +2,7 @@
 
 > Repository structure explained.
 > Updated at each phase — reflects the current state of the codebase.
-> Last updated: 2026-03-18 (Phase 1 — Foundations)
+> Last updated: 2026-03-19 (Phase 2 — Draft Engine, broadcast wiring)
 
 ---
 
@@ -82,8 +82,16 @@ backend/
 │   ├── autodraft.py         # Autodraft pick selection algorithm (pure function)
 │   │                        # select_autodraft_pick(): preference list → default value
 │   │                        # AutodraftResult, AutodraftError
+│   ├── events.py            # Typed broadcast event dataclasses (D-024)
+│   │                        # DraftStartedEvent, DraftPickMadeEvent, DraftTurnChangedEvent
+│   │                        # DraftManagerConnectedEvent, DraftManagerDisconnectedEvent
+│   │                        # DraftCompletedEvent — all extend DraftEvent base class
+│   ├── broadcaster.py       # Broadcast layer — Supabase Realtime (D-024)
+│   │                        # BroadcasterProtocol (PEP 544), MockBroadcaster (tests),
+│   │                        # SupabaseBroadcaster (production, channel per league)
 │   └── engine.py            # DraftEngine — authority of state (D-001)
 │                            # Orchestrates snake_order, timer, validate_pick, autodraft
+│                            # broadcaster injected via __init__ (default: MockBroadcaster)
 │                            # DraftState, DraftStateSnapshot, PickRecord, DraftStatus
 │                            # asyncio.Lock prevents race conditions on submit_pick()
 ├── tests/
@@ -95,7 +103,7 @@ backend/
 │       ├── test_timer.py            # 22 unit tests for timer.py (pytest-asyncio)
 │       ├── test_validate_pick.py    # 17 unit tests for validate_pick.py
 │       ├── test_autodraft.py        # 16 unit tests for autodraft.py
-│       └── test_engine.py           # 18 unit tests for engine.py (pytest-asyncio)
+│       └── test_engine.py           # 26 unit tests for engine.py + broadcast events
 ├── pytest.ini             # pytest config — asyncio strict mode
 ├── requirements.txt       # Production dependencies (pinned to minor version)
 └── requirements-dev.txt   # Dev/CI dependencies (pytest, ruff, mypy)

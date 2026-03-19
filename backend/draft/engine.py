@@ -7,6 +7,7 @@ This is the central orchestrator of Phase 2. It wires together:
     - timer.py        — server-side countdown
     - validate_pick.py — pick validation
     - autodraft.py    — automatic pick selection
+    - broadcaster.py  — Supabase Realtime broadcast (D-001)
 
 Architecture principle (D-001):
     FastAPI is the authority of state. Supabase Realtime is a broadcast
@@ -26,9 +27,9 @@ Reconnection protocol (CDC v3.1, section 7.4, D-001):
     - If the timer already expired, the autodraft pick is final.
 
 Broadcast (Supabase Realtime):
-    _broadcast() is a stub in Phase 2. It will be wired to Supabase
-    Realtime in the next step. All state-changing methods call it so
-    the wiring is already in place.
+    Every state-changing method calls _broadcast(event) with a typed
+    DraftEvent. In production, a SupabaseBroadcaster is injected.
+    In tests, a MockBroadcaster captures events without any I/O.
 """
 
 from __future__ import annotations
@@ -36,6 +37,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import time
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Optional
@@ -43,6 +45,16 @@ from typing import Optional
 from app.models.league import CompetitionType
 from app.models.player import PlayerSummary
 from draft.autodraft import AutodraftError, AutodraftResult, select_autodraft_pick
+from draft.broadcaster import BroadcasterProtocol, MockBroadcaster  
+from draft.events import ( 
+    DraftCompletedEvent,
+    DraftEvent,
+    DraftManagerConnectedEvent,
+    DraftManagerDisconnectedEvent,
+    DraftPickMadeEvent,
+    DraftStartedEvent,
+    DraftTurnChangedEvent,
+)
 from draft.snake_order import generate_snake_order
 from draft.timer import DEFAULT_PICK_DURATION_SECONDS, DraftTimer
 from draft.validate_pick import (
@@ -178,6 +190,7 @@ class DraftEngine:
             available_players=players,
             competition_type=CompetitionType.INTERNATIONAL,
             pick_duration=120.0,
+            broadcaster=SupabaseBroadcaster(client, "abc123"),
         )
         await engine.start_draft(connected_manager_ids={"M1", "M3"})
         await engine.submit_pick(manager_id="M1", player_id="player-uuid")
@@ -192,6 +205,7 @@ class DraftEngine:
         competition_type: CompetitionType,
         pick_duration: float = DEFAULT_PICK_DURATION_SECONDS,
         preference_lists: Optional[dict[str, list[str]]] = None,
+        broadcaster: Optional[BroadcasterProtocol] = None,  
     ) -> None:
         """Initialise the DraftEngine. Does NOT start the draft.
 
@@ -204,6 +218,8 @@ class DraftEngine:
             competition_type: International or club (determines constraints).
             pick_duration: Seconds per pick. Default: 120s (CDC v3.1).
             preference_lists: Optional dict of manager_id → ordered player IDs.
+            broadcaster: Broadcast implementation. Defaults to MockBroadcaster
+                         (no-op safe for tests and local development).
         """
         # Shuffle managers for random draw (CDC v3.1, section 7.2)
         shuffled = manager_ids.copy()
@@ -239,6 +255,9 @@ class DraftEngine:
 
         # Concurrency lock — prevents simultaneous pick submissions
         self._lock = asyncio.Lock()
+
+        # Broadcaster — defaults to MockBroadcaster (safe no-op) 
+        self._broadcaster: BroadcasterProtocol = broadcaster or MockBroadcaster()
 
         logger.info(
             "DraftEngine created: league=%s, managers=%s, total_picks=%d",
@@ -290,7 +309,15 @@ class DraftEngine:
                 self._state.autodraft_managers,
             )
 
-            await self._broadcast()
+            # ← CHANGED: broadcast typed DraftStartedEvent
+            await self._broadcast(DraftStartedEvent(
+                league_id=self._state.league_id,
+                managers=list(self._state.managers),
+                total_picks=self._state.total_picks,
+                current_manager_id=self._state.current_manager_id,
+                pick_duration=self._state.pick_duration,
+                autodraft_managers=list(self._state.autodraft_managers),
+            ))
             await self._start_current_turn()
 
     async def submit_pick(
@@ -348,7 +375,14 @@ class DraftEngine:
                 autodrafted=False,
             )
 
-            await self._broadcast()
+            # ← CHANGED: broadcast typed DraftPickMadeEvent
+            await self._broadcast(DraftPickMadeEvent(
+                league_id=self._state.league_id,
+                pick_number=record.pick_number,
+                manager_id=record.manager_id,
+                player_id=record.player_id,
+                autodrafted=False,
+            ))
             await self._advance_to_next_turn()
 
             return record
@@ -369,12 +403,9 @@ class DraftEngine:
         async with self._lock:
             self._state.connected_managers.add(manager_id)
 
+            autodraft_deactivated = False  # track for event payload
+
             # Give control back if reconnecting during own turn before pick is made.
-            # Two cases:
-            #   1. Manual mode: timer is running (time_remaining > 0)
-            #   2. Autodraft mode: create_task() was scheduled but not yet executed
-            #      — detectable because current_manager_id is still this manager
-            #      and no pick has been recorded for this pick_number yet.
             is_own_turn = (
                 self._state.status == DraftStatus.IN_PROGRESS
                 and self._state.current_manager_id == manager_id
@@ -387,6 +418,7 @@ class DraftEngine:
 
             if is_own_turn and pick_not_yet_made:
                 self._state.autodraft_managers.discard(manager_id)
+                autodraft_deactivated = True  
                 logger.info(
                     "Manager '%s' reconnected during their turn — autodraft deactivated",
                     manager_id,
@@ -398,7 +430,13 @@ class DraftEngine:
                 )
                 self._current_timer.start()
 
-            await self._broadcast()
+            # ← CHANGED: broadcast typed DraftManagerConnectedEvent
+            await self._broadcast(DraftManagerConnectedEvent(
+                league_id=self._state.league_id,
+                manager_id=manager_id,
+                connected_managers=list(self._state.connected_managers),
+                autodraft_deactivated=autodraft_deactivated,
+            ))
             return self.get_state_snapshot()
 
     async def disconnect_manager(self, manager_id: str) -> None:
@@ -413,7 +451,13 @@ class DraftEngine:
         async with self._lock:
             self._state.connected_managers.discard(manager_id)
             logger.info("Manager '%s' disconnected", manager_id)
-            await self._broadcast()
+
+            # ← CHANGED: broadcast typed DraftManagerDisconnectedEvent
+            await self._broadcast(DraftManagerDisconnectedEvent(
+                league_id=self._state.league_id,
+                manager_id=manager_id,
+                connected_managers=list(self._state.connected_managers),
+            ))
 
     async def activate_autodraft(self, manager_id: str) -> None:
         """Manually activate autodraft for a manager.
@@ -461,8 +505,8 @@ class DraftEngine:
     async def _start_current_turn(self) -> None:
         """Start the timer (or autodraft) for the current pick slot.
 
-        If the current manager is in autodraft mode, execute autodraft
-        immediately without starting a timer.
+        Broadcasts DraftTurnChangedEvent so clients can start their
+        local countdown (clock synchronisation pattern — no tick broadcast).
         """
         if self._state.is_completed:
             await self._complete_draft()
@@ -471,10 +515,16 @@ class DraftEngine:
         current_manager = self._state.current_manager_id
         assert current_manager is not None
 
+        # broadcast turn change before starting timer/autodraft
+        await self._broadcast(DraftTurnChangedEvent(
+            league_id=self._state.league_id,
+            current_pick_number=self._state.current_pick_number,
+            current_manager_id=current_manager,
+            pick_duration=self._state.pick_duration,
+            turn_started_at=time.time(),
+        ))
+
         if current_manager in self._state.autodraft_managers:
-            # Schedule autodraft as a new Task to avoid deep recursion
-            # when all managers are in autodraft (up to 90 consecutive picks).
-            # create_task() yields control back to the event loop between picks.
             logger.debug(
                 "Pick %d: manager '%s' is in autodraft — scheduling pick",
                 self._state.current_pick_number,
@@ -496,14 +546,9 @@ class DraftEngine:
             )
 
     async def _on_timer_expired(self) -> None:
-        """Callback fired by DraftTimer when the pick time runs out.
-
-        Acquires the lock, triggers autodraft, marks the manager as
-        autodraft for remaining picks, and advances to the next turn.
-        """
+        """Callback fired by DraftTimer when the pick time runs out."""
         async with self._lock:
             if self._state.status != DraftStatus.IN_PROGRESS:
-                # Draft completed or cancelled between timer start and expiry
                 return
 
             current_manager = self._state.current_manager_id
@@ -518,18 +563,10 @@ class DraftEngine:
 
             # Mark manager as autodraft for all remaining picks (CDC 7.3)
             self._state.autodraft_managers.add(current_manager)
-
             await self._run_autodraft_for_current_pick()
 
     async def _run_autodraft_for_current_pick(self) -> None:
-        """Execute autodraft for the current pick slot.
-
-        Must be called while the lock is held (or from within a
-        method that already holds it).
-
-        Selects a player via select_autodraft_pick(), records the pick,
-        and advances to the next turn.
-        """
+        """Execute autodraft for the current pick slot."""
         current_manager = self._state.current_manager_id
         assert current_manager is not None
 
@@ -545,7 +582,6 @@ class DraftEngine:
                 competition_type=self._state.competition_type,
             )
         except AutodraftError as exc:
-            # Data integrity issue — log and halt the draft
             logger.error(
                 "AutodraftError on pick %d for manager '%s': %s",
                 self._state.current_pick_number,
@@ -554,21 +590,26 @@ class DraftEngine:
             )
             raise
 
-        self._record_pick(
+        record = self._record_pick(
             player_id=result.player_id,
             player=result.player,
             autodrafted=True,
             autodraft_source=result.source,
         )
 
-        await self._broadcast()
+        # ← CHANGED: broadcast typed DraftPickMadeEvent (autodrafted=True)
+        await self._broadcast(DraftPickMadeEvent(
+            league_id=self._state.league_id,
+            pick_number=record.pick_number,
+            manager_id=record.manager_id,
+            player_id=record.player_id,
+            autodrafted=True,
+            autodraft_source=result.source,
+        ))
         await self._advance_to_next_turn()
 
     async def _advance_to_next_turn(self) -> None:
-        """Increment the pick counter and start the next turn.
-
-        Must be called while the lock is held.
-        """
+        """Increment the pick counter and start the next turn."""
         self._state.current_pick_number += 1
 
         if self._state.is_completed:
@@ -585,7 +626,11 @@ class DraftEngine:
             self._state.league_id,
             len(self._state.picks),
         )
-        await self._broadcast()
+        # ← CHANGED: broadcast typed DraftCompletedEvent
+        await self._broadcast(DraftCompletedEvent(
+            league_id=self._state.league_id,
+            total_picks=len(self._state.picks),
+        ))
 
     # ------------------------------------------------------------------
     # Internal — state mutation helpers
@@ -598,23 +643,7 @@ class DraftEngine:
         autodrafted: bool,
         autodraft_source: Optional[str] = None,
     ) -> PickRecord:
-        """Record a pick and update all derived state.
-
-        Updates:
-            - picks history
-            - drafted_player_ids (adds player)
-            - available_players (removes player)
-            - rosters (adds player to current manager's roster)
-
-        Args:
-            player_id: The drafted player's ID.
-            player: Full PlayerSummary.
-            autodrafted: Whether this was an autodraft pick.
-            autodraft_source: 'preference_list' or 'default_value', or None.
-
-        Returns:
-            The created PickRecord.
-        """
+        """Record a pick and update all derived state."""
         current_manager = self._state.current_manager_id
         assert current_manager is not None
 
@@ -659,17 +688,7 @@ class DraftEngine:
         return record
 
     def _get_available_player(self, player_id: str) -> PlayerSummary:
-        """Look up a player in the available pool by ID.
-
-        Args:
-            player_id: The player ID to look up.
-
-        Returns:
-            The PlayerSummary if found.
-
-        Raises:
-            PickValidationError (PlayerAlreadyDraftedError): If not in pool.
-        """
+        """Look up a player in the available pool by ID."""
         from draft.validate_pick import PlayerAlreadyDraftedError
 
         for player in self._available_players:
@@ -678,15 +697,17 @@ class DraftEngine:
         raise PlayerAlreadyDraftedError(player_id)
 
     # ------------------------------------------------------------------
-    # Internal — broadcast stub
+    # Internal — broadcast
     # ------------------------------------------------------------------
 
-    async def _broadcast(self) -> None:
-        """Broadcast current state to all connected clients.
+    async def _broadcast(self, event: DraftEvent) -> None:
+        """Forward a typed event to the broadcaster.
 
-        STUB — wired to Supabase Realtime in the next step.
-        All state-changing methods call this so the integration
-        point is already in place.
+        A broadcast failure must NEVER crash the draft — the client
+        can always call GET /draft/{id}/state for a full snapshot.
+        Error handling lives in SupabaseBroadcaster.broadcast().
+
+        Args:
+            event: A typed DraftEvent subclass to send.
         """
-        # TODO: wire to Supabase Realtime channel broadcast
-        pass
+        await self._broadcaster.broadcast(event)  # ← CHANGED: was `pass`

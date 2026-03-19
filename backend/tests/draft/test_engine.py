@@ -29,6 +29,15 @@ from draft.engine import (
 )
 from draft.validate_pick import NotYourTurnError
 
+from draft.broadcaster import MockBroadcaster
+from draft.events import (
+    DraftCompletedEvent,
+    DraftManagerConnectedEvent,
+    DraftManagerDisconnectedEvent,
+    DraftPickMadeEvent,
+    DraftStartedEvent,
+    DraftTurnChangedEvent,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -423,3 +432,190 @@ class TestDraftCompletion:
         snapshot = engine.get_state_snapshot()
         assert snapshot.status == DraftStatus.COMPLETED
         assert snapshot.current_manager_id is None
+
+# ---------------------------------------------------------------------------
+# Broadcast events
+# ---------------------------------------------------------------------------
+
+
+class TestBroadcastEvents:
+    """Tests that the DraftEngine emits the correct typed events.
+
+    Each test injects a MockBroadcaster and asserts on the captured events.
+    This validates the broadcast contract between FastAPI and the frontend.
+    """
+
+    def _make_engine_with_broadcaster(
+        self,
+        manager_ids: list[str] | None = None,
+        pick_duration: float = SHORT_DURATION,
+    ) -> tuple[DraftEngine, MockBroadcaster]:
+        """Create a DraftEngine pre-wired with a MockBroadcaster."""
+        broadcaster = MockBroadcaster()
+        managers = manager_ids or ["M1", "M2"]
+        players = make_player_pool(200)
+        engine = DraftEngine(
+            league_id="league-test",
+            manager_ids=managers,
+            available_players=players,
+            competition_type=CompetitionType.INTERNATIONAL,
+            pick_duration=pick_duration,
+            broadcaster=broadcaster,
+        )
+        return engine, broadcaster
+
+    @pytest.mark.asyncio
+    async def test_start_draft_emits_draft_started_event(self) -> None:
+        """start_draft() must emit exactly one DraftStartedEvent first."""
+        engine, broadcaster = self._make_engine_with_broadcaster()
+        await engine.start_draft(connected_manager_ids={"M1", "M2"})
+
+        started_events = broadcaster.events_of_type("draft.started")
+        assert len(started_events) == 1
+
+        event = started_events[0]
+        assert isinstance(event, DraftStartedEvent)
+        assert event.league_id == "league-test"
+        assert set(event.managers) == {"M1", "M2"}
+        assert event.total_picks == 60  # 2 × 30
+        assert event.autodraft_managers == []
+
+        await asyncio.sleep(SHORT_DURATION * 3)
+
+    @pytest.mark.asyncio
+    async def test_start_draft_with_absent_manager_lists_in_autodraft(self) -> None:
+        """DraftStartedEvent must list absent managers in autodraft_managers."""
+        engine, broadcaster = self._make_engine_with_broadcaster(
+            manager_ids=["M1", "M2", "M3"]
+        )
+        await engine.start_draft(connected_manager_ids={"M1"})
+
+        event = broadcaster.events_of_type("draft.started")[0]
+        assert isinstance(event, DraftStartedEvent)
+        assert "M2" in event.autodraft_managers
+        assert "M3" in event.autodraft_managers
+        assert "M1" not in event.autodraft_managers
+
+        await asyncio.sleep(SHORT_DURATION * 3)
+
+    @pytest.mark.asyncio
+    async def test_manual_pick_emits_pick_made_event(self) -> None:
+        """submit_pick() must emit a DraftPickMadeEvent with autodrafted=False."""
+        engine, broadcaster = self._make_engine_with_broadcaster()
+        await engine.start_draft(connected_manager_ids={"M1", "M2"})
+
+        first_manager = engine.get_state_snapshot().current_manager_id
+        player = engine._available_players[0]
+        await engine.submit_pick(
+            manager_id=first_manager,
+            player_id=str(player.id),
+        )
+
+        pick_events = broadcaster.events_of_type("draft.pick_made")
+        assert len(pick_events) >= 1
+
+        # First pick_made event = our manual pick
+        event = pick_events[0]
+        assert isinstance(event, DraftPickMadeEvent)
+        assert event.pick_number == 1
+        assert event.manager_id == first_manager
+        assert event.player_id == str(player.id)
+        assert event.autodrafted is False
+        assert event.autodraft_source is None
+
+        await asyncio.sleep(SHORT_DURATION * 3)
+
+    @pytest.mark.asyncio
+    async def test_autodraft_pick_emits_pick_made_event_with_autodrafted_true(
+        self,
+    ) -> None:
+        """Timer expiry must emit a DraftPickMadeEvent with autodrafted=True."""
+        engine, broadcaster = self._make_engine_with_broadcaster(
+            pick_duration=SHORT_DURATION
+        )
+        await engine.start_draft(connected_manager_ids={"M1", "M2"})
+
+        # Wait for timer to expire and autodraft to fire
+        await asyncio.sleep(SHORT_DURATION * 4)
+
+        pick_events = broadcaster.events_of_type("draft.pick_made")
+        assert len(pick_events) >= 1
+
+        event = pick_events[0]
+        assert isinstance(event, DraftPickMadeEvent)
+        assert event.autodrafted is True
+        assert event.autodraft_source in ("preference_list", "default_value")
+
+    @pytest.mark.asyncio
+    async def test_start_draft_emits_turn_changed_event(self) -> None:
+        """_start_current_turn() must emit a DraftTurnChangedEvent."""
+        engine, broadcaster = self._make_engine_with_broadcaster()
+        await engine.start_draft(connected_manager_ids={"M1", "M2"})
+
+        turn_events = broadcaster.events_of_type("draft.turn_changed")
+        assert len(turn_events) >= 1
+
+        event = turn_events[0]
+        assert isinstance(event, DraftTurnChangedEvent)
+        assert event.current_pick_number == 1
+        assert event.current_manager_id in ("M1", "M2")
+        assert event.pick_duration == SHORT_DURATION
+        assert event.turn_started_at > 0
+
+        await asyncio.sleep(SHORT_DURATION * 3)
+
+    @pytest.mark.asyncio
+    async def test_connect_manager_emits_connected_event(self) -> None:
+        """connect_manager() must emit a DraftManagerConnectedEvent."""
+        engine, broadcaster = self._make_engine_with_broadcaster()
+        await engine.start_draft(connected_manager_ids={"M1", "M2"})
+        broadcaster.reset()  # ignore start events, focus on reconnect
+
+        await engine.connect_manager("M1")
+
+        connected_events = broadcaster.events_of_type("draft.manager_connected")
+        assert len(connected_events) == 1
+
+        event = connected_events[0]
+        assert isinstance(event, DraftManagerConnectedEvent)
+        assert event.manager_id == "M1"
+        assert "M1" in event.connected_managers
+
+        await asyncio.sleep(SHORT_DURATION * 3)
+
+    @pytest.mark.asyncio
+    async def test_disconnect_manager_emits_disconnected_event(self) -> None:
+        """disconnect_manager() must emit a DraftManagerDisconnectedEvent."""
+        engine, broadcaster = self._make_engine_with_broadcaster()
+        await engine.start_draft(connected_manager_ids={"M1", "M2"})
+        broadcaster.reset()
+
+        await engine.disconnect_manager("M2")
+
+        disconnected_events = broadcaster.events_of_type("draft.manager_disconnected")
+        assert len(disconnected_events) == 1
+
+        event = disconnected_events[0]
+        assert isinstance(event, DraftManagerDisconnectedEvent)
+        assert event.manager_id == "M2"
+        assert "M2" not in event.connected_managers
+
+        await asyncio.sleep(SHORT_DURATION * 3)
+
+    @pytest.mark.asyncio
+    async def test_completed_draft_emits_completed_event(self) -> None:
+        """A fully autodrafted draft must end with a DraftCompletedEvent."""
+        engine, broadcaster = self._make_engine_with_broadcaster(
+            pick_duration=0.001
+        )
+        # No managers connected → full autodraft → completes quickly
+        await engine.start_draft(connected_manager_ids=set())
+        await asyncio.sleep(1.0)
+
+        completed_events = broadcaster.events_of_type("draft.completed")
+        assert len(completed_events) == 1
+
+        event = completed_events[0]
+        assert isinstance(event, DraftCompletedEvent)
+        assert event.total_picks == 60  # 2 managers × 30 rounds
+        assert event.league_id == "league-test"

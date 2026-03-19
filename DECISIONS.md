@@ -663,3 +663,52 @@ Fixed by rotating through 10 nationalities in the test pool.
 Both bugs were in the tests, not in the engine logic.
 
 ---
+
+## D-024 — Broadcaster as injected dependency, Protocol over ABC
+
+**Date:** 2026-03-19
+**Status:** Accepted
+
+**Context:** The DraftEngine needs to broadcast state changes to Supabase
+Realtime after every mutation. Two questions arose: (1) how to decouple the
+engine from the Supabase SDK for testing, and (2) whether to use ABC or Protocol.
+
+**Options considered:**
+
+- A) Hardcode Supabase calls inside DraftEngine.\_broadcast().
+- B) Inject a broadcaster via the constructor — Protocol interface.
+- C) Inject a broadcaster via the constructor — ABC interface.
+
+**Decision:** Option B — BroadcasterProtocol (PEP 544 structural typing).
+Injected via DraftEngine.**init**(broadcaster=...), defaulting to MockBroadcaster.
+
+**Rationale:**
+
+- Injection: DraftEngine has no knowledge of Supabase. In tests, MockBroadcaster
+  captures events with zero I/O. In production, SupabaseBroadcaster is passed in.
+- Protocol over ABC: duck typing is more idiomatic Python 3.10+. Any class with
+  async broadcast(event) satisfies the interface — no explicit inheritance needed.
+  @runtime_checkable allows isinstance() checks for FastAPI DI validation.
+- MockBroadcaster default: the engine is safe to instantiate anywhere (scripts,
+  tests, local dev) without a Supabase connection.
+
+**Broadcast failure is non-fatal:** SupabaseBroadcaster.broadcast() catches all
+exceptions and logs them. A Realtime outage must never crash the draft — clients
+call GET /draft/{id}/state for a full snapshot (reconnection protocol, D-001).
+
+**Clock synchronisation over tick streaming:** DraftTurnChangedEvent includes
+turn_started_at + pick_duration. Clients compute the countdown locally:
+remaining = pick_duration - (now - turn_started_at). No per-second tick
+broadcast needed — far fewer messages, immune to dropped ticks.
+
+**New files:**
+
+- backend/draft/events.py — typed DraftEvent dataclasses (6 event types)
+- backend/draft/broadcaster.py — BroadcasterProtocol, MockBroadcaster, SupabaseBroadcaster
+
+**Consequences:**
+
+- DraftEngine.**init**() gains a broadcaster parameter (optional, default MockBroadcaster).
+- \_broadcast(event: DraftEvent) replaces the stub \_broadcast() — callers pass typed events.
+- 8 new tests in test_engine.py validate the broadcast contract (event types + payloads).
+- Total test count: 114 → 122 after this step (26 in test_engine.py alone).

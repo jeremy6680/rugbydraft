@@ -46,47 +46,197 @@ _TEAMS = {
 
 _PLAYERS: list[dict] = [
     # --- France ---
-    {"id": "p001", "name": "Cyril Baille", "team": "FRA", "position": PositionType.PROP},
-    {"id": "p002", "name": "Julien Marchand", "team": "FRA", "position": PositionType.HOOKER},
-    {"id": "p003", "name": "Thibaud Flament", "team": "FRA", "position": PositionType.LOCK},
-    {"id": "p004", "name": "François Cros", "team": "FRA", "position": PositionType.FLANKER},
-    {"id": "p005", "name": "Gregory Alldritt", "team": "FRA", "position": PositionType.NUMBER_8},
-    {"id": "p006", "name": "Thomas Ramos", "team": "FRA", "position": PositionType.FULLBACK},
+    {
+        "id": "p001",
+        "name": "Cyril Baille",
+        "team": "FRA",
+        "position": PositionType.PROP,
+    },
+    {
+        "id": "p002",
+        "name": "Julien Marchand",
+        "team": "FRA",
+        "position": PositionType.HOOKER,
+    },
+    {
+        "id": "p003",
+        "name": "Thibaud Flament",
+        "team": "FRA",
+        "position": PositionType.LOCK,
+    },
+    {
+        "id": "p004",
+        "name": "François Cros",
+        "team": "FRA",
+        "position": PositionType.FLANKER,
+    },
+    {
+        "id": "p005",
+        "name": "Gregory Alldritt",
+        "team": "FRA",
+        "position": PositionType.NUMBER_8,
+    },
+    {
+        "id": "p006",
+        "name": "Thomas Ramos",
+        "team": "FRA",
+        "position": PositionType.FULLBACK,
+    },
     # --- England ---
     {"id": "p007", "name": "Ellis Genge", "team": "ENG", "position": PositionType.PROP},
-    {"id": "p008", "name": "Jamie George", "team": "ENG", "position": PositionType.HOOKER},
+    {
+        "id": "p008",
+        "name": "Jamie George",
+        "team": "ENG",
+        "position": PositionType.HOOKER,
+    },
     {"id": "p009", "name": "Maro Itoje", "team": "ENG", "position": PositionType.LOCK},
-    {"id": "p010", "name": "Tom Curry", "team": "ENG", "position": PositionType.FLANKER},
-    {"id": "p011", "name": "Ben Earl", "team": "ENG", "position": PositionType.NUMBER_8},
-    {"id": "p012", "name": "Marcus Smith", "team": "ENG", "position": PositionType.FLY_HALF},
+    {
+        "id": "p010",
+        "name": "Tom Curry",
+        "team": "ENG",
+        "position": PositionType.FLANKER,
+    },
+    {
+        "id": "p011",
+        "name": "Ben Earl",
+        "team": "ENG",
+        "position": PositionType.NUMBER_8,
+    },
+    {
+        "id": "p012",
+        "name": "Marcus Smith",
+        "team": "ENG",
+        "position": PositionType.FLY_HALF,
+    },
     # --- Ireland ---
-    {"id": "p013", "name": "Andrew Porter", "team": "IRL", "position": PositionType.PROP},
-    {"id": "p014", "name": "Ronan Kelleher", "team": "IRL", "position": PositionType.HOOKER},
+    {
+        "id": "p013",
+        "name": "Andrew Porter",
+        "team": "IRL",
+        "position": PositionType.PROP,
+    },
+    {
+        "id": "p014",
+        "name": "Ronan Kelleher",
+        "team": "IRL",
+        "position": PositionType.HOOKER,
+    },
     {"id": "p015", "name": "James Ryan", "team": "IRL", "position": PositionType.LOCK},
-    {"id": "p016", "name": "Josh van der Flier", "team": "IRL", "position": PositionType.FLANKER},
-    {"id": "p017", "name": "Caelan Doris", "team": "IRL", "position": PositionType.NUMBER_8},
-    {"id": "p018", "name": "Jonathan Sexton", "team": "IRL", "position": PositionType.FLY_HALF},
+    {
+        "id": "p016",
+        "name": "Josh van der Flier",
+        "team": "IRL",
+        "position": PositionType.FLANKER,
+    },
+    {
+        "id": "p017",
+        "name": "Caelan Doris",
+        "team": "IRL",
+        "position": PositionType.NUMBER_8,
+    },
+    {
+        "id": "p018",
+        "name": "Jonathan Sexton",
+        "team": "IRL",
+        "position": PositionType.FLY_HALF,
+    },
     # --- Scotland ---
-    {"id": "p019", "name": "Pierre Schoeman", "team": "SCO", "position": PositionType.PROP},
-    {"id": "p020", "name": "George Turner", "team": "SCO", "position": PositionType.HOOKER},
+    {
+        "id": "p019",
+        "name": "Pierre Schoeman",
+        "team": "SCO",
+        "position": PositionType.PROP,
+    },
+    {
+        "id": "p020",
+        "name": "George Turner",
+        "team": "SCO",
+        "position": PositionType.HOOKER,
+    },
     {"id": "p021", "name": "Jonny Gray", "team": "SCO", "position": PositionType.LOCK},
-    {"id": "p022", "name": "Hamish Watson", "team": "SCO", "position": PositionType.FLANKER},
-    {"id": "p023", "name": "Matt Fagerson", "team": "SCO", "position": PositionType.NUMBER_8},
-    {"id": "p024", "name": "Finn Russell", "team": "SCO", "position": PositionType.FLY_HALF},
+    {
+        "id": "p022",
+        "name": "Hamish Watson",
+        "team": "SCO",
+        "position": PositionType.FLANKER,
+    },
+    {
+        "id": "p023",
+        "name": "Matt Fagerson",
+        "team": "SCO",
+        "position": PositionType.NUMBER_8,
+    },
+    {
+        "id": "p024",
+        "name": "Finn Russell",
+        "team": "SCO",
+        "position": PositionType.FLY_HALF,
+    },
     # --- Wales ---
-    {"id": "p025", "name": "Gareth Thomas", "team": "WAL", "position": PositionType.PROP},
+    {
+        "id": "p025",
+        "name": "Gareth Thomas",
+        "team": "WAL",
+        "position": PositionType.PROP,
+    },
     {"id": "p026", "name": "Dewi Lake", "team": "WAL", "position": PositionType.HOOKER},
     {"id": "p027", "name": "Adam Beard", "team": "WAL", "position": PositionType.LOCK},
-    {"id": "p028", "name": "Tommy Reffell", "team": "WAL", "position": PositionType.FLANKER},
-    {"id": "p029", "name": "Taulupe Faletau", "team": "WAL", "position": PositionType.NUMBER_8},
-    {"id": "p030", "name": "Dan Biggar", "team": "WAL", "position": PositionType.FLY_HALF},
+    {
+        "id": "p028",
+        "name": "Tommy Reffell",
+        "team": "WAL",
+        "position": PositionType.FLANKER,
+    },
+    {
+        "id": "p029",
+        "name": "Taulupe Faletau",
+        "team": "WAL",
+        "position": PositionType.NUMBER_8,
+    },
+    {
+        "id": "p030",
+        "name": "Dan Biggar",
+        "team": "WAL",
+        "position": PositionType.FLY_HALF,
+    },
     # --- Italy ---
-    {"id": "p031", "name": "Danilo Fischetti", "team": "ITA", "position": PositionType.PROP},
-    {"id": "p032", "name": "Gianmarco Lucchesi", "team": "ITA", "position": PositionType.HOOKER},
-    {"id": "p033", "name": "Niccolò Cannone", "team": "ITA", "position": PositionType.LOCK},
-    {"id": "p034", "name": "Michele Lamaro", "team": "ITA", "position": PositionType.FLANKER},
-    {"id": "p035", "name": "Lorenzo Cannone", "team": "ITA", "position": PositionType.NUMBER_8},
-    {"id": "p036", "name": "Paolo Garbisi", "team": "ITA", "position": PositionType.FLY_HALF},
+    {
+        "id": "p031",
+        "name": "Danilo Fischetti",
+        "team": "ITA",
+        "position": PositionType.PROP,
+    },
+    {
+        "id": "p032",
+        "name": "Gianmarco Lucchesi",
+        "team": "ITA",
+        "position": PositionType.HOOKER,
+    },
+    {
+        "id": "p033",
+        "name": "Niccolò Cannone",
+        "team": "ITA",
+        "position": PositionType.LOCK,
+    },
+    {
+        "id": "p034",
+        "name": "Michele Lamaro",
+        "team": "ITA",
+        "position": PositionType.FLANKER,
+    },
+    {
+        "id": "p035",
+        "name": "Lorenzo Cannone",
+        "team": "ITA",
+        "position": PositionType.NUMBER_8,
+    },
+    {
+        "id": "p036",
+        "name": "Paolo Garbisi",
+        "team": "ITA",
+        "position": PositionType.FLY_HALF,
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -152,11 +302,11 @@ _PLAYER_STATS_DATA: list[dict] = [
         "conversions_missed": 0,
         "penalties_made": 0,
         "penalties_missed": 0,
-        "fifty_twentytwo": None,       # provider does not supply
+        "fifty_twentytwo": None,  # provider does not supply
         "tackles": 8,
-        "dominant_tackles": None,      # provider does not supply
+        "dominant_tackles": None,  # provider does not supply
         "turnovers_won": 1,
-        "lineout_steals": None,        # provider does not supply
+        "lineout_steals": None,  # provider does not supply
         "penalties_conceded": 1,
         "yellow_cards": 0,
         "red_cards": 0,
@@ -238,7 +388,7 @@ _PLAYER_STATS_DATA: list[dict] = [
         "turnovers_won": 1,
         "lineout_steals": None,
         "penalties_conceded": 2,
-        "yellow_cards": 1,             # -2 pts
+        "yellow_cards": 1,  # -2 pts
         "red_cards": 0,
         "is_first_match_of_round": True,
     },
@@ -253,7 +403,7 @@ _PLAYER_STATS_DATA: list[dict] = [
         "try_assists": 1,
         "metres_carried": 55,
         "offloads": 2,
-        "drop_goals": 1,               # +3 pts (all starters)
+        "drop_goals": 1,  # +3 pts (all starters)
         "conversions_made": 1,
         "conversions_missed": 1,
         "penalties_made": 2,
@@ -363,14 +513,10 @@ class MockRugbyConnector(BaseRugbyConnector):
             fixtures = [f for f in fixtures if f.competition_id in competition_ids]
 
         if from_date is not None:
-            fixtures = [
-                f for f in fixtures if f.kickoff_utc.date() >= from_date
-            ]
+            fixtures = [f for f in fixtures if f.kickoff_utc.date() >= from_date]
 
         if to_date is not None:
-            fixtures = [
-                f for f in fixtures if f.kickoff_utc.date() <= to_date
-            ]
+            fixtures = [f for f in fixtures if f.kickoff_utc.date() <= to_date]
 
         # Return ordered by kick-off time ascending (same contract as real providers)
         return sorted(fixtures, key=lambda f: f.kickoff_utc)

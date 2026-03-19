@@ -9,10 +9,9 @@ Tests:
     - A protected route returns 401 when token is malformed
 """
 
-import pytest
 from fastapi.testclient import TestClient
 
-from app.config import get_settings, settings
+from app.config import settings
 from app.main import app
 
 # ── Test client ───────────────────────────────────────────────────────────────

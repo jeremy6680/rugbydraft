@@ -98,7 +98,9 @@ def main() -> None:
     write_json(all_stats, raw_path / "player_stats.json")
 
     print()
-    print("Ingestion complete. Run 'dbt run' from dbt_project/ to process bronze → silver.")
+    print(
+        "Ingestion complete. Run 'dbt run' from dbt_project/ to process bronze → silver."
+    )
 
 
 if __name__ == "__main__":

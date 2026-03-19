@@ -135,7 +135,9 @@ class MatchResult(BaseModel):
     away_score: int
     kickoff_utc: datetime
     round_number: int | None = None
-    status: MatchStatus  # Should always be FINISHED when returned by get_match_results()
+    status: (
+        MatchStatus  # Should always be FINISHED when returned by get_match_results()
+    )
 
 
 class PlayerMatchStats(BaseModel):

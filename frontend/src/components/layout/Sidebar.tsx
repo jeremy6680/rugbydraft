@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
@@ -64,17 +64,13 @@ export default function Sidebar() {
   const pathname = usePathname();
   const locale = useLocale();
 
-  // isCollapsed is undefined until we've read localStorage (client only).
-  // Rendering null until mounted prevents hydration mismatch entirely.
-  const [isCollapsed, setIsCollapsed] = useState<boolean | undefined>(
-    undefined,
-  );
-
-  // Read localStorage once after first client render.
-  // Single setState call — no cascade.
-  useEffect(() => {
-    setIsCollapsed(localStorage.getItem(STORAGE_KEY) === "true");
-  }, []);
+  // Initialize from localStorage via lazy initializer — runs once on mount,
+  // client-side only. Returns undefined during SSR (localStorage unavailable),
+  // which triggers the `return null` guard below to prevent hydration mismatch.
+  const [isCollapsed, setIsCollapsed] = useState<boolean | undefined>(() => {
+    if (typeof window === "undefined") return undefined;
+    return localStorage.getItem(STORAGE_KEY) === "true";
+  });
 
   // Persist to localStorage on every toggle.
   const handleToggle = () => {

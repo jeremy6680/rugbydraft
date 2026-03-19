@@ -18,7 +18,6 @@ on:
       - "feat/*"
       - "fix/*"
     paths:
-      # Trigger only when pipeline code changes
       - "dbt_project/**"
       - "connectors/**"
       - "scripts/**"
@@ -33,19 +32,13 @@ on:
       - ".github/workflows/ci-dbt.yml"
 
 jobs:
-  # ─────────────────────────────────────────────────────────────────────────────
-  # JOB: dbt pipeline — ingest → run → test
-  # ─────────────────────────────────────────────────────────────────────────────
   dbt-pipeline:
     name: dbt pipeline (bronze → silver)
     runs-on: ubuntu-latest
 
     env:
-      # DuckDB database file path — written to a temp dir in CI
       DUCKDB_PATH: "/tmp/rugbydraft_ci.duckdb"
-      # Raw JSON output directory for ingest_mock.py
       DUCKDB_RAW_PATH: "data/raw"
-      # Always use mock connector in CI
       RUGBY_DATA_SOURCE: "mock"
 
     steps:
@@ -61,8 +54,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          # Separate cache key from backend — different requirements
-          key: ${{ runner.os }}-pip-dbt-${{ hashFiles('dbt_project/requirements*.txt', 'connectors/requirements*.txt') }}
+          key: ${{ runner.os }}-pip-dbt-${{ hashFiles('dbt_project/requirements.txt', 'connectors/requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-dbt-
             ${{ runner.os }}-pip-
@@ -70,42 +62,31 @@ jobs:
       - name: Install dbt and connector dependencies
         run: |
           python -m pip install --upgrade pip
-          # dbt-duckdb includes dbt-core as a dependency
-          pip install dbt-duckdb
-          # Connector dependencies (pydantic for BaseRugbyConnector models)
-          pip install pydantic
+          # Pin to the exact version validated locally — prevents surprise breakage
+          pip install -r dbt_project/requirements.txt
+          pip install -r connectors/requirements.txt
 
       - name: Create dbt profiles.yml
-        # profiles.yml is gitignored — we generate it dynamically in CI.
-        # DuckDB only needs a file path — no credentials required.
-        # We write to ~/.dbt/ which is the default dbt profiles directory.
+        # profiles.yml is gitignored — generated dynamically in CI.
+        # IMPORTANT: use printf, not heredoc, to avoid indentation issues.
+        # A heredoc inside a YAML step inherits the step's indentation,
+        # which produces an invalid profiles.yml (extra leading spaces).
         run: |
           mkdir -p ~/.dbt
-          cat > ~/.dbt/profiles.yml << 'EOF'
-          rugbydraft:
-            target: ci
-            outputs:
-              ci:
-                type: duckdb
-                path: "/tmp/rugbydraft_ci.duckdb"
-                threads: 4
-          EOF
+          printf 'rugbydraft:\n  target: ci\n  outputs:\n    ci:\n      type: duckdb\n      path: "/tmp/rugbydraft_ci.duckdb"\n      threads: 4\n' > ~/.dbt/profiles.yml
+          echo "=== profiles.yml content ==="
+          cat ~/.dbt/profiles.yml
 
       - name: Create data/raw directory
-        # ingest_mock.py creates this automatically, but explicit is better
         run: mkdir -p data/raw
 
       - name: Run mock data ingestion
-        # Calls MockRugbyConnector and writes JSON files to data/raw/
-        # These files are the source for dbt bronze models (read_json_auto)
         run: python3 scripts/ingest_mock.py
 
       - name: Verify ingestion output
-        # Sanity check — fail fast if expected files are missing
         run: |
           echo "=== Checking data/raw/ contents ==="
           ls -la data/raw/
-          # Fail if any expected file is missing
           for file in fixtures.json player_availability.json match_results.json player_stats.json; do
             if [ ! -f "data/raw/$file" ]; then
               echo "ERROR: data/raw/$file is missing"
@@ -116,18 +97,11 @@ jobs:
 
       - name: Run dbt (bronze → silver)
         working-directory: dbt_project
-        run: |
-          # --profiles-dir : explicit path to avoid relying on HOME detection
-          # --target ci    : use the 'ci' output defined in profiles.yml above
-          dbt run --profiles-dir ~/.dbt --target ci
+        run: dbt run --profiles-dir ~/.dbt --target ci
 
       - name: Run dbt tests (silver layer)
         working-directory: dbt_project
-        run: |
-          # Runs all tests defined in models/schema.yml
-          # Covers: not_null, unique, accepted_values on silver models
-          # PRs are blocked if any test fails
-          dbt test --profiles-dir ~/.dbt --target ci
+        run: dbt test --profiles-dir ~/.dbt --target ci
 
       - name: Upload dbt logs on failure
         if: failure()

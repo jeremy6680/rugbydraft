@@ -623,3 +623,43 @@ single source of truth for roster rules. The internal helper is imported directl
   audit trail and future analytics.
 - AutodraftError (no valid player found) indicates a data integrity issue —
   DraftEngine must halt the draft and alert the commissioner.
+
+---
+
+## D-023 — DraftEngine: asyncio.create_task() for autodraft to prevent recursion
+
+**Date:** 2026-03-19
+**Status:** Accepted
+
+**Context:** When all managers are in autodraft, \_start_current_turn() →
+\_run_autodraft_for_current_pick() → \_advance_to_next_turn() → \_start_current_turn()
+creates a synchronous recursive call chain up to N_managers × 30 levels deep.
+This caused RecursionError / AutodraftError in tests and made start_draft()
+block until the entire draft completed.
+
+**Decision:** In \_start_current_turn(), autodraft picks are scheduled via
+asyncio.create_task() instead of direct await. This yields control back to
+the event loop between each pick, breaking the recursion.
+
+**Consequences:**
+
+- start_draft() returns immediately even if all managers are in autodraft.
+- connect_manager() can deactivate autodraft between picks (reconnection protocol).
+- The lock must be re-acquired inside \_run_autodraft_for_current_pick() since
+  it is now called from a separate Task.
+
+**Bug found during tests — reconnection with autodraft:**
+connect_manager() originally checked self.\_current_timer is not None to
+detect "own turn with time remaining". But in autodraft mode there is no
+timer — the condition silently failed. Fixed by checking pick_not_yet_made
+(no pick recorded for current_pick_number) instead. When a manager reconnects
+during their autodraft turn before the task executes, we discard them from
+autodraft_managers and start a real timer for manual control.
+
+**Bug found during tests — homogeneous player pool:**
+make_player_pool() in tests generated all players with nationality="FRA".
+After 8 picks, MAX_PER_NATION was hit and AutodraftError was raised.
+Fixed by rotating through 10 nationalities in the test pool.
+Both bugs were in the tests, not in the engine logic.
+
+---

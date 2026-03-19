@@ -112,8 +112,8 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 - [x] Server-side timer (FastAPI manages countdown, not clients)
 - [x] Pick validation: correct manager, correct turn, player available
 - [x] Autodraft algorithm: pick from preference list, or by default value score
-- [ ] Timeout → auto-activate autodraft for remaining picks
-- [ ] "Manager never connected" → full autodraft from draft start
+- [x] Timeout → auto-activate autodraft for remaining picks
+- [x] "Manager never connected" → full autodraft from draft start
 
 ### Realtime (Supabase Realtime as broadcast)
 

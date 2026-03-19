@@ -1,7 +1,7 @@
 # NEXT_STEPS.md — RugbyDraft
 
-> Current status: Phase 0 complete (API-Sports ruled out). Provider search in progress. Phase 1 ready to start.
-> Last updated: 2026-03-18
+> Current status: Phase 1 complete. Phase 2 ready to start.
+> Last updated: 2026-03-19
 
 ---
 
@@ -37,7 +37,7 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ---
 
-## 🟡 Phase 1 — Foundations (in progress)
+## ✅ Phase 1 — Foundations (complete)
 
 **Estimated duration:** 2–3 weeks
 **Objective:** Project skeleton, database schema, data pipeline up to silver layer, CI/CD, i18n structure.
@@ -95,16 +95,16 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ### CI/CD
 
-- [ ] GitHub Actions: ruff + pytest on push
-- [ ] GitHub Actions: axe-core on PRs (basic pages)
-- [ ] GitHub Actions: TypeScript lint
+- [x] GitHub Actions: ruff + pytest — `ci-python.yml`
+- [x] GitHub Actions: TypeScript lint + axe-core — `ci-frontend.yml`
+- [x] GitHub Actions: dbt pipeline (bronze → silver) — `ci-dbt.yml`
 
 ---
 
-## Phase 2 — Draft Engine
+## 🔴 Phase 2 — Draft Engine (next)
 
 **Estimated duration:** 3–4 weeks
-**Prerequisite:** Phase 1 complete, PostgreSQL schema live.
+**Prerequisite:** Phase 1 complete ✅, PostgreSQL schema live ✅.
 
 ### Core draft logic
 
@@ -300,5 +300,5 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 ## Immediate next actions
 
 **→ Phase 0 (parallel):** await responses from Statscore and DSG.
-**→ Phase 1 — next step: CI/CD** — GitHub Actions (ruff + pytest + TS lint + axe-core).
-**→ Phase 1 — remaining:** Cron Coolify config (after deploy).
+**→ Phase 2:** snake draft order algorithm — first step is the pure Python function, tested in isolation before any FastAPI integration.
+**→ Phase 1 — remaining:** Cron Coolify config (after first deploy to Hetzner).

@@ -1,0 +1,138 @@
+# .github/workflows/ci-dbt.yml
+#
+# CI pipeline for the dbt data pipeline.
+# Runs on every push and pull request that touches pipeline code.
+#
+# Jobs:
+#   dbt-pipeline — ingest mock data → dbt run (bronze→silver) → dbt test
+#
+# Uses DuckDB as the engine — no external database service required in CI.
+
+name: CI — dbt Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - "phase/*"
+      - "feat/*"
+      - "fix/*"
+    paths:
+      # Trigger only when pipeline code changes
+      - "dbt_project/**"
+      - "connectors/**"
+      - "scripts/**"
+      - ".github/workflows/ci-dbt.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "dbt_project/**"
+      - "connectors/**"
+      - "scripts/**"
+      - ".github/workflows/ci-dbt.yml"
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # JOB: dbt pipeline — ingest → run → test
+  # ─────────────────────────────────────────────────────────────────────────────
+  dbt-pipeline:
+    name: dbt pipeline (bronze → silver)
+    runs-on: ubuntu-latest
+
+    env:
+      # DuckDB database file path — written to a temp dir in CI
+      DUCKDB_PATH: "/tmp/rugbydraft_ci.duckdb"
+      # Raw JSON output directory for ingest_mock.py
+      DUCKDB_RAW_PATH: "data/raw"
+      # Always use mock connector in CI
+      RUGBY_DATA_SOURCE: "mock"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          # Separate cache key from backend — different requirements
+          key: ${{ runner.os }}-pip-dbt-${{ hashFiles('dbt_project/requirements*.txt', 'connectors/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-dbt-
+            ${{ runner.os }}-pip-
+
+      - name: Install dbt and connector dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # dbt-duckdb includes dbt-core as a dependency
+          pip install dbt-duckdb
+          # Connector dependencies (pydantic for BaseRugbyConnector models)
+          pip install pydantic
+
+      - name: Create dbt profiles.yml
+        # profiles.yml is gitignored — we generate it dynamically in CI.
+        # DuckDB only needs a file path — no credentials required.
+        # We write to ~/.dbt/ which is the default dbt profiles directory.
+        run: |
+          mkdir -p ~/.dbt
+          cat > ~/.dbt/profiles.yml << 'EOF'
+          rugbydraft:
+            target: ci
+            outputs:
+              ci:
+                type: duckdb
+                path: "/tmp/rugbydraft_ci.duckdb"
+                threads: 4
+          EOF
+
+      - name: Create data/raw directory
+        # ingest_mock.py creates this automatically, but explicit is better
+        run: mkdir -p data/raw
+
+      - name: Run mock data ingestion
+        # Calls MockRugbyConnector and writes JSON files to data/raw/
+        # These files are the source for dbt bronze models (read_json_auto)
+        run: python3 scripts/ingest_mock.py
+
+      - name: Verify ingestion output
+        # Sanity check — fail fast if expected files are missing
+        run: |
+          echo "=== Checking data/raw/ contents ==="
+          ls -la data/raw/
+          # Fail if any expected file is missing
+          for file in fixtures.json player_availability.json match_results.json player_stats.json; do
+            if [ ! -f "data/raw/$file" ]; then
+              echo "ERROR: data/raw/$file is missing"
+              exit 1
+            fi
+          done
+          echo "All expected JSON files present."
+
+      - name: Run dbt (bronze → silver)
+        working-directory: dbt_project
+        run: |
+          # --profiles-dir : explicit path to avoid relying on HOME detection
+          # --target ci    : use the 'ci' output defined in profiles.yml above
+          dbt run --profiles-dir ~/.dbt --target ci
+
+      - name: Run dbt tests (silver layer)
+        working-directory: dbt_project
+        run: |
+          # Runs all tests defined in models/schema.yml
+          # Covers: not_null, unique, accepted_values on silver models
+          # PRs are blocked if any test fails
+          dbt test --profiles-dir ~/.dbt --target ci
+
+      - name: Upload dbt logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-logs
+          path: dbt_project/logs/
+          retention-days: 7

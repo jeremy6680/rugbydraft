@@ -1,0 +1,6 @@
+# connectors/requirements.txt
+# Connector dependencies — independent of the backend (FastAPI).
+# The connectors package is used by both the pipeline scripts and CI.
+
+# Pydantic v2 — used by BaseRugbyConnector models
+pydantic==2.11.1

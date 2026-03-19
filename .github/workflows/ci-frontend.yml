@@ -1,0 +1,149 @@
+# .github/workflows/ci-frontend.yml
+#
+# CI pipeline for the Next.js frontend.
+# Runs on every push and pull request that touches frontend code.
+#
+# Jobs:
+#   type-check     — TypeScript strict check (tsc --noEmit)
+#   lint           — ESLint (next core-web-vitals + typescript rules)
+#   build-and-a11y — Next.js production build + axe-core accessibility audit
+#
+# All three jobs must pass for a PR to be mergeable.
+
+name: CI — Frontend
+
+on:
+  push:
+    branches:
+      - main
+      - "phase/*"
+      - "feat/*"
+      - "fix/*"
+    paths:
+      # Trigger only when frontend code or config changes
+      - "frontend/**"
+      - ".github/workflows/ci-frontend.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "frontend/**"
+      - ".github/workflows/ci-frontend.yml"
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # JOB 1: TypeScript type check
+  # ─────────────────────────────────────────────────────────────────────────────
+  type-check:
+    name: Type check (tsc)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          # Cache npm dependencies using package-lock.json as cache key
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        # npm ci is mandatory in CI:
+        # - installs exactly what is in package-lock.json
+        # - fails if lock file is out of sync with package.json
+        # - never modifies the lock file
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run TypeScript check
+        working-directory: frontend
+        run: npm run type-check
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # JOB 2: ESLint
+  # ─────────────────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint (ESLint)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run ESLint
+        working-directory: frontend
+        run: npm run lint
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # JOB 3: Production build + axe-core accessibility audit
+  # ─────────────────────────────────────────────────────────────────────────────
+  build-and-a11y:
+    name: Build + Accessibility (axe-core)
+    runs-on: ubuntu-latest
+    # Run after both checks — no point building if types or lint fail
+    needs: [type-check, lint]
+
+    env:
+      # Next.js requires NEXT_PUBLIC_* vars at build time (inlined in bundle).
+      # These are mock values — the build will succeed without a real Supabase.
+      NEXT_PUBLIC_SUPABASE_URL: "https://mock-project.supabase.co"
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiJ9.mock"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build Next.js (production)
+        working-directory: frontend
+        run: npm run build
+
+      - name: Start Next.js server in background
+        working-directory: frontend
+        run: |
+          npm run start &
+          # Wait for server to be ready before running axe-core (max 30s)
+          npx wait-on http://localhost:3000 --timeout 30000
+
+      - name: Run axe-core accessibility audit
+        run: |
+          # Audit the login page — first public-facing page, no auth required
+          # --tags wcag2a,wcag2aa : enforce WCAG 2.1 AA (CDC requirement)
+          # --exit                : non-zero exit code on any violation (blocks PR)
+          # Note: axe-core detects ~30% of WCAG issues automatically.
+          # Manual review is still required for the remaining 70%.
+          npx @axe-core/cli http://localhost:3000/fr/login \
+            --tags wcag2a,wcag2aa \
+            --exit
+
+      - name: Upload build artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: next-build-output
+          path: frontend/.next/
+          retention-days: 3

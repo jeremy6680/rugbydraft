@@ -102,6 +102,31 @@ See `DECISIONS.md` D-012 for the provider selection status.
 
 ---
 
+## connectors/
+
+Connector implementations for rugby data sources.
+All connectors implement `BaseRugbyConnector` — switching providers
+requires changing one file and one environment variable.
+
+```
+connectors/
+├── __init__.py
+├── base.py          # BaseRugbyConnector ABC — defines the connector contract
+├── mock.py          # MockRugbyConnector — returns fixture data for testing
+└── requirements.txt # Connector dependencies (pydantic) — used by CI and pipeline
+```
+
+| File               | Purpose                                                      |
+| ------------------ | ------------------------------------------------------------ |
+| `base.py`          | Abstract base class — all connectors must implement this     |
+| `mock.py`          | Stub connector returning hardcoded data — used in Phase 1 CI |
+| `requirements.txt` | Pinned dependencies for CI cache stability                   |
+
+Real connector implementations (`statscore.py`, `sportradar.py`, etc.)
+will be added in Phase 3 once the provider is confirmed (D-012).
+
+---
+
 ## db/
 
 Database migrations and tests.
@@ -138,7 +163,9 @@ dbt_project/
 ├── tests/                 # dbt schema tests (not_null, unique, accepted_values)
 ├── models/schema.yml      # Test definitions for bronze and silver layers
 ├── dbt_project.yml        # dbt project configuration
-└── profiles.yml.example   # Connection profile template (never commit profiles.yml)
+├── profiles.yml.example   # Connection profile template (never commit profiles.yml)
+├── requirements.txt           # Pipeline dependencies — dbt-duckdb (pinned)
+
 ```
 
 ### Medallion layers

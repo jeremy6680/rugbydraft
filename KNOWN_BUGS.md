@@ -1,7 +1,7 @@
 # KNOWN_BUGS.md — RugbyDraft
 
 > Created when needed, removed when empty.
-> Last updated: 2026-03-18
+> Last updated: 2026-03-19
 
 ---
 
@@ -16,3 +16,21 @@ for dbt 1.11.
 The warning fires incorrectly — tests pass (PASS=29).
 **Workaround:** None needed. Tests are valid and passing.
 **Fix:** Will resolve on dbt-core or dbt-duckdb upgrade.
+
+---
+
+## KB-002 — Next.js 16: `middleware.ts` convention deprecated in favour of `proxy.ts`
+
+**Status:** Known / deferred to Phase 2
+**Affects:** Build output warning only — middleware functions correctly
+**Symptom:** Build warning:
+`⚠ The "middleware" file convention is deprecated. Please use "proxy" instead.`
+**Root cause:** Next.js 16 renamed the middleware file convention from
+`middleware.ts` to `proxy.ts`. The existing file still works but triggers
+a deprecation warning on every build and in CI logs.
+**Workaround:** None needed. All route protection and session refresh logic
+functions correctly.
+**Fix:** Before Phase 2, rename `frontend/src/middleware.ts` → `frontend/src/proxy.ts`
+and verify all imports and the `matcher` export still work correctly.
+
+---

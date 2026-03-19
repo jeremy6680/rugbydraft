@@ -300,5 +300,6 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 ## Immediate next actions
 
 **→ Phase 0 (parallel):** await responses from Statscore and DSG.
-**→ Phase 2:** snake draft order algorithm — first step is the pure Python function, tested in isolation before any FastAPI integration.
+**→ Phase 2 (next session):** Supabase Realtime broadcast — wire \_broadcast()
+in DraftEngine to Supabase channel. Then Draft Assistée, then Ghost team.
 **→ Phase 1 — remaining:** Cron Coolify config (after first deploy to Hetzner).

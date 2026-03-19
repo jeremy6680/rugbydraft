@@ -1,6 +1,6 @@
 # NEXT_STEPS.md — RugbyDraft
 
-> Current status: Phase 1 complete. Phase 2 ready to start.
+> Current status: Phase 2 in progress — Realtime broadcast complete, reconnection protocol next.
 > Last updated: 2026-03-19
 
 ---
@@ -119,7 +119,9 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 - [x] FastAPI broadcasts state updates to Supabase Realtime channel
 - [ ] Client subscribes to channel, renders state received from server
-- [ ] Never write draft state directly from client to DB
+      → **Phase 4 (Frontend)** — Next.js `useEffect` + `supabase.channel()` subscription
+- ~~Never write draft state directly from client to DB~~
+  → Architectural principle (D-001), not a task. Guaranteed by design: only FastAPI writes to the DB.
 
 ### Reconnection protocol (see DECISIONS.md D-001)
 

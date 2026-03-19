@@ -1,35 +1,51 @@
 import { createServerClient } from "@supabase/ssr";
-import { type NextRequest, NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import createIntlMiddleware from "next-intl/middleware";
 import { routing } from "@/i18n/routing";
 
-/**
- * Combined middleware: Supabase Auth session refresh + next-intl locale routing.
- *
- * Order matters:
- * 1. Supabase refreshes the session cookie on every request — this must run
- *    first so that Server Components receive a valid session.
- * 2. next-intl handles locale detection and URL redirects (/→/fr).
- *
- * Why chain them manually instead of using next-intl's built-in auth?
- * Because Supabase requires direct access to the NextResponse object to
- * set cookies — next-intl's middleware wrapper doesn't expose this.
- */
+// ---------------------------------------------------------------------------
+// next-intl middleware instance
+// ---------------------------------------------------------------------------
 
-/* next-intl middleware instance — reused on every request */
 const intlMiddleware = createIntlMiddleware(routing);
 
-export async function middleware(request: NextRequest) {
-  /* Start with a basic response that next-intl can modify */
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  });
+// ---------------------------------------------------------------------------
+// Public routes — no session required.
+// Matched against pathname with locale prefix removed.
+// ---------------------------------------------------------------------------
 
-  /* Step 1 — Supabase: refresh session cookie if expired.
-   * This keeps the user logged in across page navigations.
-   * We use the anon key here — the session token is in the cookie. */
+const PUBLIC_ROUTES = ["/login", "/auth/callback"];
+
+function isPublicRoute(pathname: string): boolean {
+  const pathnameWithoutLocale = pathname.replace(/^\/[a-z]{2}(\/|$)/, "/");
+  return PUBLIC_ROUTES.some(
+    (route) =>
+      pathnameWithoutLocale === route ||
+      pathnameWithoutLocale.startsWith(`${route}/`),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// middleware
+// ---------------------------------------------------------------------------
+// Order of operations:
+//
+// 1. Run next-intl FIRST to get its response (locale rewriting, redirects).
+// 2. Create the Supabase client using the intl response as the base —
+//    so session cookies are written onto the same response object that
+//    next-intl already prepared.
+// 3. Check auth and redirect to login if needed.
+//
+// This approach avoids the "two responses" problem where Supabase cookies
+// were written to a response that next-intl then discarded.
+// ---------------------------------------------------------------------------
+
+export async function middleware(request: NextRequest) {
+  // --- Step 1: Run next-intl first, get its response ---
+  // We use this as the base response so locale rewrites are preserved.
+  const intlResponse = intlMiddleware(request);
+
+  // --- Step 2: Create Supabase client, writing cookies onto intlResponse ---
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -39,50 +55,45 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          /* Write updated cookies to both the request and response */
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value),
-          );
-          response = NextResponse.next({ request });
+          // Write session cookies onto the intl response — not a new response.
+          // This ensures both locale rewrites AND session cookies survive.
           cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options),
+            intlResponse.cookies.set(name, value, options),
           );
         },
       },
     },
   );
 
-  /* Refresh session — do not remove this call.
-   * It's a no-op if the session is still valid, but essential when
-   * the access token has expired and needs to be refreshed via the
-   * refresh token stored in the cookie. */
-  await supabase.auth.getUser();
+  // Validate the session (triggers token refresh if needed).
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  /* Step 2 — next-intl: handle locale detection and URL redirects */
-  const intlResponse = intlMiddleware(request);
+  // --- Step 3: Protect routes ---
+  const { pathname } = request.nextUrl;
 
-  /* If next-intl wants to redirect (e.g. / → /fr), honour that redirect
-   * but carry over any cookies Supabase may have set */
-  if (intlResponse.status !== 200) {
-    /* Copy Supabase cookies onto the intl redirect response */
-    response.cookies.getAll().forEach((cookie) => {
-      intlResponse.cookies.set(cookie.name, cookie.value);
-    });
-    return intlResponse;
+  if (!isPublicRoute(pathname) && !user) {
+    // Extract locale from URL for a localised redirect.
+    const localeMatch = pathname.match(/^\/([a-z]{2})(\/|$)/);
+    const locale = localeMatch ? localeMatch[1] : routing.defaultLocale;
+
+    return NextResponse.redirect(new URL(`/${locale}/login`, request.url));
   }
 
-  return response;
+  // Return the intl response with session cookies attached.
+  return intlResponse;
 }
 
 export const config = {
   matcher: [
     /*
      * Match all request paths EXCEPT:
-     * - _next/static  (static files)
-     * - _next/image   (image optimisation)
-     * - favicon.ico   (favicon)
-     * - Files with extensions (images, fonts, etc.)
+     * - _next/static, _next/image  (Next.js internals)
+     * - favicon.ico
+     * - Static assets (images, fonts, etc.)
+     * - auth/callback              (Supabase Auth handler — no locale prefix)
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)",
+    "/((?!_next/static|_next/image|favicon.ico|auth/callback|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff|woff2|ttf|otf)$).*)",
   ],
 };

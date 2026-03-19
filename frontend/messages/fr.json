@@ -18,21 +18,31 @@
     "filter": "Filtrer",
     "sort": "Trier",
     "yes": "Oui",
-    "no": "Non"
+    "no": "Non",
+    "skipToContent": "Aller au contenu principal"
   },
   "nav": {
-    "dashboard": "Tableau de bord",
+    "home": "Accueil",
+    "league": "Ma ligue",
     "draft": "Draft",
+    "stats": "Stats",
+    "account": "Mon compte",
+    "dashboard": "Tableau de bord",
     "roster": "Mon équipe",
     "leaderboard": "Classement",
-    "stats": "Statistiques",
     "profile": "Profil",
     "settings": "Paramètres",
     "logout": "Se déconnecter"
   },
+  "sidebar": {
+    "collapse": "Réduire le menu",
+    "expand": "Développer le menu",
+    "ariaLabel": "Navigation principale"
+  },
   "auth": {
     "login": "Se connecter",
     "logout": "Se déconnecter",
+    "loggingOut": "Déconnexion…",
     "signup": "Créer un compte",
     "loginWithGoogle": "Continuer avec Google",
     "loginWithMagicLink": "Connexion par lien magique",

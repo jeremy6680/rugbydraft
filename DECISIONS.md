@@ -431,3 +431,35 @@ needing to hardcode hex values outside of `globals.css`.
 - CDC section on colors is superseded by this decision — do not revert to `#1A5C38`
 
 ---
+
+## D-018 — AppShell: middleware-first auth, intlMiddleware response as base
+
+**Date:** 2026-03-19
+**Status:** Accepted
+
+**Context:** Implementing route protection required combining Supabase Auth
+session refresh with next-intl locale routing in a single middleware.ts.
+Two approaches were tested.
+
+**Problem encountered:** Running Supabase first (writing cookies to a
+NextResponse.next()) then calling intlMiddleware(request) discarded the
+session cookies — next-intl creates a new response object, ignoring the
+previous one. Result: getUser() in the protected layout found no session
+and redirected to login even after successful authentication.
+
+**Decision:** Run intlMiddleware(request) first to obtain its response
+object, then write Supabase session cookies onto that same response.
+This guarantees both locale rewrites and session cookies survive on the
+single response returned to the browser.
+
+**Additional fix:** The auth/callback route.ts was writing session cookies
+onto the Next.js cookieStore rather than the redirect response. Cookies
+written to cookieStore in a Route Handler are not reliably sent to the
+browser. Fixed by constructing the NextResponse.redirect() first and
+writing cookies directly onto it before returning.
+
+**Consequences:**
+
+- middleware.ts order is: intlMiddleware → Supabase getUser → route guard
+- auth/callback/route.ts writes cookies onto redirectResponse, not cookieStore
+- /auth/callback is excluded from the middleware matcher entirely

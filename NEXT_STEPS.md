@@ -90,8 +90,8 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 - [x] Supabase Auth UI integration (magic link — Google OAuth deferred to pre-Phase 4)
 - [x] shadcn/ui install + theme configuration (Figma palette — see D-017)
 - [x] `frontend/.env.example` created — env vars split: frontend vs backend
-- [ ] Basic layout: bottom nav bar (mobile), sidebar (desktop) — **next session**
-- [ ] Route protection middleware (redirect to /fr/login if unauthenticated) — **next session**
+- [x] Basic layout: bottom nav bar (mobile), sidebar (desktop) — AppShell pattern
+- [x] Route protection middleware (redirect to /fr/login if unauthenticated)
 
 ### CI/CD
 
@@ -300,5 +300,5 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 ## Immediate next actions
 
 **→ Phase 0 (parallel):** await responses from Statscore and DSG.
-**→ Phase 1 — next step: AppShell layout** — bottom nav (mobile) + sidebar (desktop) + route protection.
-**→ Phase 1 — remaining:** CI/CD (GitHub Actions), Cron Coolify config (after deploy).
+**→ Phase 1 — next step: CI/CD** — GitHub Actions (ruff + pytest + TS lint + axe-core).
+**→ Phase 1 — remaining:** Cron Coolify config (after deploy).

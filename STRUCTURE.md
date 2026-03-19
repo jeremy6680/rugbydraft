@@ -200,34 +200,40 @@ Initialized in Phase 1. Located in `frontend/` subdirectory of the public repo.
 ```
 frontend/
 ├── messages/
-│   └── fr.json                   # All French UI strings — never hardcode in components
-├── public/                        # Static assets (favicons, images)
+│   └── fr.json                        # All French UI strings — never hardcode in components
+├── public/                             # Static assets (favicons, images)
 ├── src/
 │   ├── app/
 │   │   ├── auth/
 │   │   │   └── callback/
-│   │   │       └── route.ts      # Supabase Auth callback — exchanges code for session
-│   │   └── [locale]/             # next-intl dynamic locale segment
-│   │       ├── layout.tsx        # Root layout: fonts, NextIntlClientProvider, body styles
-│   │       ├── page.tsx          # Temp home page (Phase 1 skeleton — replaced in Phase 4)
-│   │       ├── login/
-│   │       │   └── page.tsx      # Login page: split-screen brand + magic link form
-│   │       └── dashboard/
-│   │           └── page.tsx      # Dashboard placeholder (replaced in Phase 4)
+│   │   │       └── route.ts           # Supabase Auth callback — exchanges code for session
+│   │   └── [locale]/                  # next-intl dynamic locale segment
+│   │       ├── layout.tsx             # Root layout: fonts, NextIntlClientProvider, body styles
+│   │       ├── page.tsx               # Temp home page (Phase 1 skeleton)
+│   │       ├── (protected)/           # Route group — authenticated pages only
+│   │       │   ├── layout.tsx         # Session guard (getUser) + AppShell wrapper
+│   │       │   └── dashboard/
+│   │       │       └── page.tsx       # Dashboard placeholder (replaced in Phase 4)
+│   │       └── login/
+│   │           └── page.tsx           # Login page: split-screen brand + magic link form
 │   ├── components/
-│   │   └── auth/
-│   │       └── LoginForm.tsx     # Magic link form — Client Component
+│   │   ├── auth/
+│   │   │   └── LoginForm.tsx          # Magic link form — Client Component
+│   │   └── layout/
+│   │       ├── AppShell.tsx           # Layout wrapper: Sidebar + main + BottomNav
+│   │       ├── BottomNav.tsx          # Mobile fixed bottom nav — 5 items, Client Component
+│   │       └── Sidebar.tsx            # Desktop sticky sidebar — collapsible, Client Component
 │   ├── i18n/
-│   │   ├── routing.ts            # next-intl: supported locales, defaultLocale, localePrefix
-│   │   └── request.ts            # next-intl: server-side locale resolution + message loading
+│   │   ├── routing.ts                 # next-intl: supported locales, defaultLocale
+│   │   └── request.ts                 # next-intl: server-side locale resolution
 │   └── lib/
 │       └── supabase/
-│           ├── client.ts         # createBrowserSupabaseClient — for Client Components
-│           └── server.ts         # createServerSupabaseClient — for Server Components
-├── middleware.ts                  # Combined: Supabase session refresh + next-intl routing
-├── .env.example                   # Frontend env vars template (NEXT_PUBLIC_SUPABASE_*)
-├── next.config.ts                 # Next.js config + next-intl plugin
-└── tsconfig.json                  # TypeScript strict mode, path alias @/*
+│           ├── client.ts              # createBrowserSupabaseClient — Client Components
+│           └── server.ts              # createServerSupabaseClient — Server Components
+├── middleware.ts                       # next-intl routing + Supabase session refresh + route protection
+├── .env.example
+├── next.config.ts
+└── tsconfig.json
 ```
 
 ---

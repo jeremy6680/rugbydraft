@@ -9,27 +9,25 @@ import { NextRequest, NextResponse } from "next/server";
  * 1. User clicks magic link in email
  * 2. Supabase redirects to: /auth/callback?code=xxxx
  * 3. This route exchanges the code for a session (PKCE flow)
- * 4. Session is stored in cookies
- * 5. User is redirected to /fr/dashboard (or the original destination)
+ * 4. Session cookies are written onto the redirect response
+ * 5. User is redirected to /fr/dashboard (or the `next` param destination)
  *
- * This route has no locale prefix — it's a pure API handler, not a page.
- * next-intl middleware matcher excludes it via the file extension pattern.
+ * This route has no locale prefix — it is a pure API handler, not a page.
+ * It is excluded from the next-intl middleware matcher explicitly.
  */
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
 
-  /* The auth code provided by Supabase in the redirect URL */
   const code = searchParams.get("code");
-
-  /* Optional: where to redirect after successful login.
-   * Defaults to /fr/dashboard if not specified. */
   const next = searchParams.get("next") ?? "/fr/dashboard";
 
   if (!code) {
-    /* No code in URL — something went wrong upstream.
-     * Redirect to login with an error indicator. */
+    // No code in URL — something went wrong upstream.
     return NextResponse.redirect(`${origin}/fr/login?error=no_code`);
   }
+
+  // Build the redirect response first — we will write cookies onto it.
+  const redirectResponse = NextResponse.redirect(`${origin}${next}`);
 
   const cookieStore = await cookies();
 
@@ -41,18 +39,17 @@ export async function GET(request: NextRequest) {
         getAll() {
           return cookieStore.getAll();
         },
+        // Write session cookies directly onto the redirect response —
+        // this guarantees the browser receives them with the 302 redirect.
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
+            redirectResponse.cookies.set(name, value, options);
           });
         },
       },
     },
   );
 
-  /* Exchange the auth code for a session.
-   * This creates the auth cookies that the middleware will read
-   * on subsequent requests to identify the logged-in user. */
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
@@ -63,6 +60,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/fr/login?error=auth_failed`);
   }
 
-  /* Session created — redirect to destination */
-  return NextResponse.redirect(`${origin}${next}`);
+  // Session cookies are now on redirectResponse — the browser will store them
+  // and the middleware will find them on the next request to /fr/dashboard.
+  return redirectResponse;
 }

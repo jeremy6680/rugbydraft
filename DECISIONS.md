@@ -582,3 +582,44 @@ Lesson: test fixtures must not violate unrelated constraints.
 - Constants `MAX_PER_NATION=8` and `MAX_PER_CLUB=6` are defined here (D-016).
 
 ---
+
+## D-022 — Autodraft as a pure function, reusing validate_pick constraints
+
+**Date:** 2026-03-19
+**Status:** Accepted
+
+**Context:** Autodraft must respect the same roster constraints as a manual pick
+(nationality/club limits). Two approaches were considered for constraint checking.
+
+**Options considered:**
+
+- A) Duplicate the constraint logic inside autodraft.py.
+- B) Reuse \_validate_roster_constraints() from validate_pick.py directly.
+
+**Decision:** Option B — autodraft calls \_validate_roster_constraints() as a
+single source of truth for roster rules. The internal helper is imported directly.
+
+**Rationale:**
+
+- Zero duplication: constraint logic lives in one place only.
+- If MAX_PER_NATION or MAX_PER_CLUB change, autodraft picks up the change
+  automatically — no second file to update.
+- \_passes_roster_constraints() wraps the call in a try/except and returns
+  a bool — clean interface for the autodraft iteration loop.
+- Note: RosterFullError is intentionally NOT caught in autodraft — if the
+  roster is full, autodraft should never have been triggered (DraftEngine bug).
+
+**Selection algorithm:**
+
+1. Preference list (manager's personal ranking) — first available valid player.
+2. Default value (available_players pre-sorted by value_score desc by DraftEngine)
+   — first player that passes constraints.
+
+**Consequences:**
+
+- available_players must be pre-sorted by value_score descending by the caller
+  (DraftEngine). autodraft.py does not sort — separation of responsibilities.
+- AutodraftResult.source = "preference_list" | "default_value" — logged for
+  audit trail and future analytics.
+- AutodraftError (no valid player found) indicates a data integrity issue —
+  DraftEngine must halt the draft and alert the commissioner.

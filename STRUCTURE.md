@@ -76,9 +76,12 @@ backend/
 │   ├── timer.py             # Server-side pick countdown (asyncio.Task)
 │   │                        # DraftTimer: start(), cancel(), time_remaining
 │   │                        # on_expire callback triggers autodraft
-│   └── validate_pick.py     # Pure pick validation — 3 layers, typed exceptions
-│                            # validate_pick(), RosterSnapshot, PickValidationError
-│                            # Constants: ROSTER_SIZE=30, MAX_PER_NATION=8, MAX_PER_CLUB=6
+│   ├── validate_pick.py     # Pure pick validation — 3 layers, typed exceptions
+│   │                        # validate_pick(), RosterSnapshot, PickValidationError
+│   │                        # Constants: ROSTER_SIZE=30, MAX_PER_NATION=8, MAX_PER_CLUB=6
+│   └── autodraft.py         # Autodraft pick selection algorithm (pure function)
+│                            # select_autodraft_pick(): preference list → default value
+│                            # AutodraftResult, AutodraftError
 ├── tests/
 │   ├── __init__.py
 │   ├── test_health.py     # 8 tests — health endpoint + auth middleware
@@ -86,7 +89,8 @@ backend/
 │       ├── __init__.py              # Draft tests package marker
 │       ├── test_snake_order.py      # 33 unit tests for snake_order.py
 │       ├── test_timer.py            # 22 unit tests for timer.py (pytest-asyncio)
-│       └── test_validate_pick.py    # 17 unit tests for validate_pick.py
+│       ├── test_validate_pick.py    # 17 unit tests for validate_pick.py
+│       └── test_autodraft.py        # 16 unit tests for autodraft.py
 ├── pytest.ini             # pytest config — asyncio strict mode
 ├── requirements.txt       # Production dependencies (pinned to minor version)
 └── requirements-dev.txt   # Dev/CI dependencies (pytest, ruff, mypy)

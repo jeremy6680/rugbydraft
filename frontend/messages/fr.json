@@ -1,0 +1,159 @@
+{
+  "common": {
+    "appName": "RugbyDraft",
+    "appTagline": "Fantasy rugby · Snake draft",
+    "loading": "Chargement…",
+    "error": "Une erreur est survenue",
+    "retry": "Réessayer",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "confirm": "Confirmer",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "close": "Fermer",
+    "back": "Retour",
+    "next": "Suivant",
+    "previous": "Précédent",
+    "search": "Rechercher",
+    "filter": "Filtrer",
+    "sort": "Trier",
+    "yes": "Oui",
+    "no": "Non",
+    "skipToContent": "Aller au contenu principal"
+  },
+  "nav": {
+    "home": "Accueil",
+    "league": "Ma ligue",
+    "draft": "Draft",
+    "stats": "Stats",
+    "account": "Mon compte",
+    "dashboard": "Tableau de bord",
+    "roster": "Mon équipe",
+    "leaderboard": "Classement",
+    "profile": "Profil",
+    "settings": "Paramètres",
+    "logout": "Se déconnecter"
+  },
+  "sidebar": {
+    "collapse": "Réduire le menu",
+    "expand": "Développer le menu",
+    "ariaLabel": "Navigation principale"
+  },
+  "auth": {
+    "login": "Se connecter",
+    "logout": "Se déconnecter",
+    "loggingOut": "Déconnexion…",
+    "signup": "Créer un compte",
+    "loginWithGoogle": "Continuer avec Google",
+    "loginWithMagicLink": "Connexion par lien magique",
+    "magicLinkSent": "Lien envoyé ! Vérifiez votre boîte mail.",
+    "magicLinkPlaceholder": "votre@email.com",
+    "welcomeBack": "Bon retour !",
+    "welcomeTitle": "Bienvenue sur RugbyDraft",
+    "welcomeSubtitle": "Le fantasy rugby avec draft au serpent"
+  },
+  "dashboard": {
+    "title": "Tableau de bord",
+    "myLeagues": "Mes ligues",
+    "noLeagues": "Vous n'avez pas encore de ligue.",
+    "createLeague": "Créer une ligue",
+    "joinLeague": "Rejoindre une ligue",
+    "nextDraft": "Prochain draft",
+    "nextMatch": "Prochain match",
+    "currentRound": "Journée {round}",
+    "alerts": "Alertes"
+  },
+  "draft": {
+    "title": "Salle de draft",
+    "pickNumber": "Sélection n°{pick}",
+    "yourTurn": "C'est votre tour !",
+    "waitingFor": "En attente de {manager}…",
+    "timeRemaining": "{seconds}s",
+    "pickConfirm": "Sélectionner {player} ?",
+    "autodraftActive": "Autodraft activé",
+    "draftComplete": "Draft terminé !",
+    "searchPlayer": "Rechercher un joueur…",
+    "filterPosition": "Position",
+    "filterNationality": "Nationalité",
+    "filterClub": "Club",
+    "available": "Disponible",
+    "picked": "Drafté",
+    "positions": {
+      "prop": "Pilier",
+      "hooker": "Talonneur",
+      "lock": "Deuxième ligne",
+      "flanker": "Troisième ligne aile",
+      "number8": "Numéro 8",
+      "scrumHalf": "Demi de mêlée",
+      "flyHalf": "Demi d'ouverture",
+      "centre": "Centre",
+      "wing": "Ailier",
+      "fullback": "Arrière"
+    }
+  },
+  "roster": {
+    "title": "Mon équipe",
+    "starters": "Titulaires",
+    "bench": "Remplaçants",
+    "infirmary": "Infirmerie",
+    "captain": "Capitaine",
+    "kicker": "Buteur",
+    "setCaptain": "Désigner capitaine",
+    "setKicker": "Désigner buteur",
+    "moveToStarter": "Mettre titulaire",
+    "moveToBench": "Mettre sur le banc",
+    "moveToIR": "Mettre à l'infirmerie",
+    "locked": "Verrouillé",
+    "lockedAt": "Verrouillé au coup d'envoi"
+  },
+  "leaderboard": {
+    "title": "Classement",
+    "rank": "Rang",
+    "manager": "Manager",
+    "points": "Points",
+    "roundPoints": "J{round}",
+    "total": "Total"
+  },
+  "stats": {
+    "title": "Statistiques",
+    "player": "Joueur",
+    "position": "Poste",
+    "club": "Club",
+    "nationality": "Nationalité",
+    "totalPoints": "Points total",
+    "avgPoints": "Moy. points",
+    "tries": "Essais",
+    "tackles": "Plaquages",
+    "metres": "Mètres",
+    "turnovers": "Turnovers",
+    "noStats": "Aucune statistique disponible"
+  },
+  "league": {
+    "title": "Ma ligue",
+    "commissioner": "Commissaire",
+    "managers": "Managers",
+    "competition": "Compétition",
+    "season": "Saison",
+    "status": {
+      "upcoming": "À venir",
+      "drafting": "Draft en cours",
+      "active": "En cours",
+      "completed": "Terminée"
+    }
+  },
+  "errors": {
+    "notFound": "Page introuvable",
+    "notFoundDescription": "Cette page n'existe pas ou a été déplacée.",
+    "unauthorized": "Accès refusé",
+    "unauthorizedDescription": "Vous devez être connecté pour accéder à cette page.",
+    "serverError": "Erreur serveur",
+    "serverErrorDescription": "Une erreur inattendue s'est produite. Réessayez dans quelques instants."
+  },
+  "plans": {
+    "free": "Gratuit",
+    "pro": "Pro",
+    "proIA": "Pro + IA",
+    "upgrade": "Passer au Pro",
+    "trialRemaining": "{days} jours d'essai restants"
+  }
+}

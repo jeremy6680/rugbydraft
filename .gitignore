@@ -35,6 +35,17 @@ dbt_project/target/
 dbt_project/dbt_packages/
 dbt_project/logs/
 
+# Generated data files — not source code
+data/raw/
+data/*.duckdb
+data/*.duckdb.wal
+
+# dbt logs
+logs/
+
+# pyenv local version file
+.python-version
+
 # ── DuckDB ────────────────────────────────────────────────────────────────────
 *.duckdb
 *.duckdb.wal

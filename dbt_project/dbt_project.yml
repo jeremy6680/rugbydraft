@@ -1,0 +1,40 @@
+# dbt_project.yml — dbt Core project configuration for RugbyDraft
+#
+# Medallion architecture: bronze (raw) → silver (staged) → gold (marts, Phase 3)
+# Engine: DuckDB (batch analytics) → results written to PostgreSQL in gold layer
+# Documentation: STRUCTURE.md / CONTEXT.md
+
+name: rugbydraft
+version: "1.0.0"
+config-version: 2
+
+# Path to profiles.yml (connection config) — never committed, use profiles.yml.example
+profile: rugbydraft
+
+# Directory layout
+model-paths: ["models"]
+test-paths: ["tests"]
+analysis-paths: ["analyses"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  rugbydraft:
+    # Bronze layer — raw data as ingested from connector, no transformation
+    # Materialized as views: lightweight, always reflects latest raw data
+    bronze:
+      +materialized: view
+      +schema: bronze
+
+    # Silver layer — cleaned, typed, deduplicated, canonical column names
+    # Materialized as tables: queried repeatedly by gold layer and tests
+    silver:
+      +materialized: table
+      +schema: silver
+
+    # Gold layer — fantasy points, leaderboard, player value (Phase 3)
+    # Materialized as tables: written to PostgreSQL via dbt-duckdb attach
+    # gold:
+    #   +materialized: table
+    #   +schema: gold

@@ -287,3 +287,179 @@
 - Phase 1 connector implementation will build `BaseRugbyConnector` + a mock/stub implementation for testing.
 - `connectors/api_sports.py` may still be implemented for fixture fetching (schedule, match status) if the chosen provider doesn't cover this use case cheaply.
 - CDC v3.1 cost estimates will need revision once a provider is confirmed.
+
+---
+
+## D-013 — `number_8` as distinct position type from `flanker`
+
+**Date:** 2026-03-18
+**Status:** Accepted
+
+**Context:** The CDC defines "3 third-row forwards" without distinguishing number 8 from flankers. In rugby, the number 8 is structurally distinct from flankers in terms of physical profile and, in some scoring systems, role-specific stats.
+
+**Decision:** `position_type` enum separates `number_8` from `flanker`. This gives full positional granularity from day one.
+
+**Rationale:**
+
+- Roster constraint validation is more precise (can enforce "at least 1 number 8 on bench" if needed in V2).
+- No cost: the extra enum value has zero impact on application logic.
+- Reversible: merging back into a generic `back_row` type is a simple migration if needed.
+
+**Consequences:**
+
+- Player data must assign positions correctly: flankers get `flanker`, the number 8 gets `number_8`.
+- The mock connector must respect this distinction in fixture data.
+
+---
+
+## D-014 — Circular FK between `users` and `leagues` resolved via ALTER TABLE
+
+**Date:** 2026-03-18
+**Status:** Accepted
+
+**Context:** `users.ai_league_id` references `leagues`, but `leagues.commissioner_id` references `users`. Neither table can be created first with both FK constraints.
+
+**Decision:** Create `users` first without the `ai_league_id` FK, create `leagues`, then add the FK with `ALTER TABLE users ADD CONSTRAINT ...`.
+
+**Rationale:** Standard PostgreSQL pattern for circular references. Clean, readable, no workaround needed.
+
+**Consequences:** Migration order must be respected. The `ALTER TABLE` must come after `leagues` creation in every future migration that recreates these tables.
+
+---
+
+## D-015 — RLS requires both GRANT and policies (Supabase)
+
+**Date:** 2026-03-18
+**Status:** Accepted
+
+**Context:** During RLS testing, all authenticated queries returned `permission denied`
+despite correct RLS policies being in place.
+
+**Finding:** PostgreSQL enforces two independent access control layers:
+
+1. `GRANT` — controls whether a role can access the table at all.
+2. RLS policies — control which rows that role can see.
+
+Without `GRANT SELECT` on a table, RLS policies never evaluate — the query
+fails at the permission check. Both layers are required.
+
+**Decision:** All tables have explicit `GRANT` statements for the `authenticated`
+and `service_role` roles. `fantasy_scores_staging` intentionally has no grant
+for `authenticated` — `permission denied` is the correct behaviour for clients.
+
+**Consequences:** Any new table added to the schema requires both an RLS policy
+AND a `GRANT` statement. This is documented as a checklist item for future migrations.
+
+---
+
+## D-016 — Roster composition constraints: fixed in V1, configurable in V2
+
+**Date:** 2026-03-18
+**Status:** Accepted
+
+**Context:** The CDC defines maximum players per nation/club in a roster:
+
+- International competitions: maximum 8 players from the same nation
+- Club competitions: maximum 6 players from the same club
+
+The question was whether these limits should be fixed constants or
+configurable per league by the commissioner.
+
+**Options considered:**
+
+- A) Fixed constants — hardcoded in the draft engine validation logic
+- B) Configurable per league — stored as fields on the `leagues` table,
+  editable by the commissioner before the draft starts
+
+**Decision:** Option A in V1. Option B deferred to V2 if demand is confirmed.
+
+**Rationale:**
+
+- Configurable limits require additional DB fields, commissioner UI,
+  and draft engine logic that reads config instead of constants.
+- The majority of commissioners will never change these defaults.
+- V1 scope must stay focused — this is a nice-to-have, not a core feature.
+- Adding configurable limits in V2 is a non-breaking migration
+  (add columns with defaults matching the current hardcoded values).
+
+**Consequences:**
+
+- `MAX_PLAYERS_PER_NATION = 8` and `MAX_PLAYERS_PER_CLUB = 6` will be
+  defined as constants in the draft engine (Phase 2).
+- Validation happens in FastAPI at pick time — not in Pydantic models.
+- If a commissioner requests custom limits in beta feedback → implement in V2.
+
+---
+
+## D-017 — Brand color palette updated from CDC specification
+
+**Date:** 2026-03-19
+**Status:** Decided
+
+### Context
+
+The CDC (v3.1) specified `#1A5C38` (forest green) as the primary brand color.
+During Phase 1 frontend skeleton, a full color palette was designed in Figma
+("RugbyDraft Color Palette") with a revised brand direction.
+
+### Decision
+
+The Figma palette supersedes the CDC color specification. The four brand colors are:
+
+- **Crimson** `#872138` — primary (CTA, active states, brand identity)
+- **Rose** `#F2CAD3` — accent (hover states, soft backgrounds)
+- **Deep** `#21080E` — foreground (text, dark surfaces)
+- **Lime** `#99BF36` — secondary (scores, positive highlights, secondary CTA)
+
+Each color has a 7-shade scale defined in Figma and mapped to CSS custom properties
+in `frontend/src/app/globals.css` via Tailwind v4 `@theme inline`.
+
+The CDC document is **not updated** (confidential, gitignored). This entry is the
+source of truth for the color decision going forward.
+
+### Rationale
+
+The crimson/lime combination creates a stronger visual identity for a rugby app
+(intensity, energy, sport) compared to the original forest green. The complete
+7-shade palette enables a consistent design system across all components without
+needing to hardcode hex values outside of `globals.css`.
+
+### Impact
+
+- `frontend/src/app/globals.css` — CSS custom properties + Tailwind v4 theme mapping
+- `frontend/src/app/[locale]/login/page.tsx` — uses brand colors directly
+- CDC section on colors is superseded by this decision — do not revert to `#1A5C38`
+
+---
+
+## D-018 — AppShell: middleware-first auth, intlMiddleware response as base
+
+**Date:** 2026-03-19
+**Status:** Accepted
+
+**Context:** Implementing route protection required combining Supabase Auth
+session refresh with next-intl locale routing in a single middleware.ts.
+Two approaches were tested.
+
+**Problem encountered:** Running Supabase first (writing cookies to a
+NextResponse.next()) then calling intlMiddleware(request) discarded the
+session cookies — next-intl creates a new response object, ignoring the
+previous one. Result: getUser() in the protected layout found no session
+and redirected to login even after successful authentication.
+
+**Decision:** Run intlMiddleware(request) first to obtain its response
+object, then write Supabase session cookies onto that same response.
+This guarantees both locale rewrites and session cookies survive on the
+single response returned to the browser.
+
+**Additional fix:** The auth/callback route.ts was writing session cookies
+onto the Next.js cookieStore rather than the redirect response. Cookies
+written to cookieStore in a Route Handler are not reliably sent to the
+browser. Fixed by constructing the NextResponse.redirect() first and
+writing cookies directly onto it before returning.
+
+**Consequences:**
+
+- middleware.ts order is: intlMiddleware → Supabase getUser → route guard
+- auth/callback/route.ts writes cookies onto redirectResponse, not cookieStore
+- /auth/callback is excluded from the middleware matcher entirely

@@ -1,0 +1,6 @@
+# dbt_project/requirements.txt
+# Pipeline dependencies — pinned for reproducible CI runs.
+# Install with: pip install -r dbt_project/requirements.txt
+
+# dbt-duckdb includes dbt-core as a transitive dependency
+dbt-duckdb==1.9.2

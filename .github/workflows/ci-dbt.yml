@@ -1,0 +1,114 @@
+# .github/workflows/ci-dbt.yml
+#
+# CI pipeline for the dbt data pipeline.
+# Runs on every push and pull request that touches pipeline code.
+#
+# Jobs:
+#   dbt-pipeline — ingest mock data → dbt run (bronze→silver) → dbt test
+#
+# Uses DuckDB as the engine — no external database service required in CI.
+
+name: CI — dbt Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - "phase/*"
+      - "feat/*"
+      - "fix/*"
+    paths:
+      - "dbt_project/**"
+      - "connectors/**"
+      - "scripts/**"
+      - ".github/workflows/ci-dbt.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "dbt_project/**"
+      - "connectors/**"
+      - "scripts/**"
+      - ".github/workflows/ci-dbt.yml"
+
+jobs:
+  dbt-pipeline:
+    name: dbt pipeline (bronze → silver)
+    runs-on: ubuntu-latest
+
+    env:
+      DUCKDB_PATH: "/tmp/rugbydraft_ci.duckdb"
+      # Absolute path — dbt resolves relative paths from dbt_project/ working dir,
+      # but data/raw/ lives at repo root. $GITHUB_WORKSPACE is set by GitHub Actions.
+      DUCKDB_RAW_PATH: "${{ github.workspace }}/data/raw"
+      RUGBY_DATA_SOURCE: "mock"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-dbt-${{ hashFiles('dbt_project/requirements.txt', 'connectors/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-dbt-
+            ${{ runner.os }}-pip-
+
+      - name: Install dbt and connector dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Pin to the exact version validated locally — prevents surprise breakage
+          pip install -r dbt_project/requirements.txt
+          pip install -r connectors/requirements.txt
+
+      - name: Create dbt profiles.yml
+        # profiles.yml is gitignored — generated dynamically in CI.
+        # IMPORTANT: use printf, not heredoc, to avoid indentation issues.
+        # A heredoc inside a YAML step inherits the step's indentation,
+        # which produces an invalid profiles.yml (extra leading spaces).
+        run: |
+          mkdir -p ~/.dbt
+          printf 'rugbydraft:\n  target: ci\n  outputs:\n    ci:\n      type: duckdb\n      path: "/tmp/rugbydraft_ci.duckdb"\n      threads: 4\n' > ~/.dbt/profiles.yml
+          echo "=== profiles.yml content ==="
+          cat ~/.dbt/profiles.yml
+
+      - name: Create data/raw directory
+        run: mkdir -p data/raw
+
+      - name: Run mock data ingestion
+        run: python3 scripts/ingest_mock.py
+
+      - name: Verify ingestion output
+        run: |
+          echo "=== Checking data/raw/ contents ==="
+          ls -la data/raw/
+          for file in fixtures.json player_availability.json match_results.json player_stats.json; do
+            if [ ! -f "data/raw/$file" ]; then
+              echo "ERROR: data/raw/$file is missing"
+              exit 1
+            fi
+          done
+          echo "All expected JSON files present."
+
+      - name: Run dbt (bronze → silver)
+        working-directory: dbt_project
+        run: dbt run --profiles-dir ~/.dbt --target ci
+
+      - name: Run dbt tests (silver layer)
+        working-directory: dbt_project
+        run: dbt test --profiles-dir ~/.dbt --target ci
+
+      - name: Upload dbt logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-logs
+          path: dbt_project/logs/
+          retention-days: 7

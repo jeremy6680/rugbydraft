@@ -1,0 +1,305 @@
+/* Import Tailwind CSS v4 */
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* =========================================================
+   RugbyDraft Design System — CSS Custom Properties
+   Source of truth: Figma "RugbyDraft Color Palette"
+   Decision: DECISIONS.md D-017
+   ========================================================= */
+
+@layer base {
+  :root {
+    /* --- Semantic tokens (light mode) --- */
+
+    /* Backgrounds & surfaces */
+    --background: #faeef0;
+    --foreground: #21080e;
+    --card: #ffffff;
+    --card-foreground: #21080e;
+    --popover: #ffffff;
+    --popover-foreground: #21080e;
+
+    /* Brand — Crimson primary */
+    --primary: #872138;
+    --primary-foreground: #faeef0;
+
+    /* Brand — Lime secondary */
+    --secondary: #99bf36;
+    --secondary-foreground: #0d1302;
+
+    /* Muted / atténué */
+    --muted: #f3dfe2;
+    --muted-foreground: #736769;
+
+    /* Accent — Rose doux (hover states) */
+    --accent: #f2cad3;
+    --accent-foreground: #50101e;
+
+    /* Destructive — Rouge vif */
+    --destructive: #c23454;
+    --destructive-foreground: #faeef0;
+
+    /* Borders & inputs */
+    --border: #e3aeb8;
+    --input: #e3aeb8;
+    --ring: #872138;
+
+    /* Border radius — cohérent avec le style rugby (légèrement arrondi) */
+    --radius: 0.5rem;
+
+    /* --- Full palette scales (for direct use in components) --- */
+
+    /* Crimson scale */
+    --crimson-50: #f7d4d8;
+    --crimson-100: #f09eaa;
+    --crimson-200: #eb6079;
+    --crimson-300: #c23454;
+    --crimson-400: #872138;
+    --crimson-500: #50101e;
+    --crimson-600: #27040b;
+
+    /* Rose scale */
+    --rose-50: #faeef0;
+    --rose-100: #f2cad3;
+    --rose-200: #e895ab;
+    --rose-300: #e05683;
+    --rose-400: #ab3a60;
+    --rose-500: #74243f;
+    --rose-600: #411121;
+
+    /* Lime scale */
+    --lime-50: #bbe944;
+    --lime-100: #99bf36;
+    --lime-200: #789629;
+    --lime-300: #59701c;
+    --lime-400: #3b4b10;
+    --lime-500: #202a05;
+    --lime-600: #0d1302;
+
+    /* Slate scale (neutrals) */
+    --slate-50: #dedbdb;
+    --slate-100: #b9b3b4;
+    --slate-200: #978c8d;
+    --slate-300: #736769;
+    --slate-400: #4e4647;
+    --slate-500: #2c2728;
+    --slate-600: #131011;
+  }
+
+  /* --- Dark mode --- */
+  .dark {
+    --background: #21080e;
+    --foreground: #faeef0;
+    --card: #27040b;
+    --card-foreground: #faeef0;
+    --popover: #27040b;
+    --popover-foreground: #faeef0;
+
+    --primary: #f09eaa;
+    --primary-foreground: #21080e;
+
+    --secondary: #99bf36;
+    --secondary-foreground: #0d1302;
+
+    --muted: #50101e;
+    --muted-foreground: #b9b3b4;
+
+    --accent: #50101e;
+    --accent-foreground: #f2cad3;
+
+    --destructive: #eb6079;
+    --destructive-foreground: #21080e;
+
+    --border: #50101e;
+    --input: #50101e;
+    --ring: #f09eaa;
+  }
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* =========================================================
+   Tailwind v4 — theme mapping
+   Maps CSS custom properties → Tailwind utility classes
+   ========================================================= */
+
+@theme inline {
+  /* Core tokens */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Palette scales → Tailwind utilities */
+  --color-crimson-50: var(--crimson-50);
+  --color-crimson-100: var(--crimson-100);
+  --color-crimson-200: var(--crimson-200);
+  --color-crimson-300: var(--crimson-300);
+  --color-crimson-400: var(--crimson-400);
+  --color-crimson-500: var(--crimson-500);
+  --color-crimson-600: var(--crimson-600);
+
+  --color-rose-50: var(--rose-50);
+  --color-rose-100: var(--rose-100);
+  --color-rose-200: var(--rose-200);
+  --color-rose-300: var(--rose-300);
+  --color-rose-400: var(--rose-400);
+  --color-rose-500: var(--rose-500);
+  --color-rose-600: var(--rose-600);
+
+  --color-lime-50: var(--lime-50);
+  --color-lime-100: var(--lime-100);
+  --color-lime-200: var(--lime-200);
+  --color-lime-300: var(--lime-300);
+  --color-lime-400: var(--lime-400);
+  --color-lime-500: var(--lime-500);
+  --color-lime-600: var(--lime-600);
+
+  --color-slate-50: var(--slate-50);
+  --color-slate-100: var(--slate-100);
+  --color-slate-200: var(--slate-200);
+  --color-slate-300: var(--slate-300);
+  --color-slate-400: var(--slate-400);
+  --color-slate-500: var(--slate-500);
+  --color-slate-600: var(--slate-600);
+
+  /* Typography */
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* Border radius */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 4px);
+  --radius-xl: calc(var(--radius) + 8px);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* =========================================================
+   Base styles
+   ========================================================= */
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+    /* Improve text rendering */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.809 0.105 251.813);
+  --chart-2: oklch(0.623 0.214 259.815);
+  --chart-3: oklch(0.546 0.245 262.881);
+  --chart-4: oklch(0.488 0.243 264.376);
+  --chart-5: oklch(0.424 0.199 265.638);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.809 0.105 251.813);
+  --chart-2: oklch(0.623 0.214 259.815);
+  --chart-3: oklch(0.546 0.245 262.881);
+  --chart-4: oklch(0.488 0.243 264.376);
+  --chart-5: oklch(0.424 0.199 265.638);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}

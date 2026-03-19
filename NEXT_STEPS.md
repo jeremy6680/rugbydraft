@@ -1,7 +1,7 @@
 # NEXT_STEPS.md — RugbyDraft
 
-> Current status: Phase 0 complete (API-Sports ruled out). Provider search in progress. Phase 1 ready to start.
-> Last updated: 2026-03-18
+> Current status: Phase 1 complete. Phase 2 ready to start.
+> Last updated: 2026-03-19
 
 ---
 
@@ -37,7 +37,7 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ---
 
-## 🔴 Phase 1 — Foundations (start now)
+## ✅ Phase 1 — Foundations (complete)
 
 **Estimated duration:** 2–3 weeks
 **Objective:** Project skeleton, database schema, data pipeline up to silver layer, CI/CD, i18n structure.
@@ -46,62 +46,65 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ### Repositories & structure
 
-- [ ] Create public repo `jeremy6680/rugbydraft`
-- [ ] Create private repo `jeremy6680/rugbydraft-private`
-- [ ] Set up folder structure (see `STRUCTURE.md` once created)
-- [ ] Add `.gitignore` — include `docs/cdc*.md`, `docs/cdc*.docx`, `.env*`
-- [ ] Copy `CONTEXT.md`, `DECISIONS.md`, `NEXT_STEPS.md` to repo root
-- [ ] Create `STRUCTURE.md`
-- [ ] Create `.env.example` with all required variables documented
+- [x] Create public repo `jeremy6680/rugbydraft`
+- [x] Set up folder structure
+- [x] Add `.gitignore` — includes `docs/cdc*.md`, `docs/cdc*.docx`, `.env*`
+- [x] Copy `CONTEXT.md`, `DECISIONS.md`, `NEXT_STEPS.md` to repo root
+- [x] Create `STRUCTURE.md`
+- [x] Create `.env.example` with all required variables documented
+- [x] Update `README.md` — public description, no mention of business model or Staff IA
+- [ ] Create private repo `jeremy6680/rugbydraft-private` — Phase 5, not needed yet
 
 ### Database (Supabase)
 
-- [ ] Create Supabase project
-- [ ] Write full PostgreSQL schema (all tables from CDC section 18)
-- [ ] Enable Row Level Security on all tables
-- [ ] Create initial migrations (plain SQL files in `db/migrations/`)
-- [ ] Test RLS policies: a user can only access their own league data
+- [x] Create Supabase project
+- [x] Write full PostgreSQL schema (all tables from CDC section 18)
+- [x] Enable Row Level Security on all tables
+- [x] Create initial migrations (plain SQL files in `db/migrations/`)
+- [x] Test RLS policies: a user can only access their own league data
 
 ### Data pipeline — Bronze/Silver
 
-- [ ] Implement `connectors/base.py` — `BaseRugbyConnector` ABC
-- [ ] Implement `connectors/mock.py` — stub connector returning fixture data for testing
-- [ ] Set `RUGBY_DATA_SOURCE=mock` in `.env.example` (updated to real provider once confirmed)
-- [ ] dbt project init (`dbt init rugbydraft`)
-- [ ] Bronze models: `raw_matches`, `raw_player_stats`, `raw_fixtures`, `raw_player_availability`
-- [ ] Silver models: `stg_players`, `stg_matches`, `stg_match_stats`, `stg_fixtures`, `stg_player_availability`
-- [ ] dbt tests on silver models (not_null, unique on key fields)
+- [x] Implement `connectors/base.py` — `BaseRugbyConnector` ABC
+- [x] Implement `connectors/mock.py` — stub connector returning fixture data for testing
+- [x] Set `RUGBY_DATA_SOURCE=mock` in `.env.example` (updated to real provider once confirmed)
+- [x] dbt project init (`dbt init rugbydraft`)
+- [x] Bronze models: `raw_matches`, `raw_player_stats`, `raw_fixtures`, `raw_player_availability`
+- [x] Silver models: `stg_players`, `stg_matches`, `stg_match_stats`, `stg_fixtures`, `stg_player_availability`
+- [x] dbt tests on silver models (not_null, unique on key fields)
 - [ ] Cron Coolify: `daily_fixtures` (06:00) and `daily_availability` (08:00)
 
 ### Backend skeleton
 
-- [ ] FastAPI project init
-- [ ] Supabase Auth integration (JWT verification middleware)
-- [ ] Basic health endpoint `GET /health`
-- [ ] Pydantic models for core entities (Player, League, User)
-- [ ] Rate limiting with slowapi (100 req/min per IP)
+- [x] FastAPI project init
+- [x] Supabase Auth integration (JWT verification middleware)
+- [x] Basic health endpoint `GET /health`
+- [x] Pydantic models for core entities (Player, League, User)
+- [x] Rate limiting with slowapi (100 req/min per IP)
 
 ### Frontend skeleton
 
-- [ ] `npx create-next-app@latest` with App Router + TypeScript + Tailwind v4
-- [ ] Install and configure next-intl
-- [ ] Create `messages/fr.json` with initial keys
-- [ ] Supabase Auth UI integration (Google OAuth + magic link)
-- [ ] Basic layout: bottom nav bar (mobile), sidebar (desktop)
-- [ ] shadcn/ui install + theme configuration (green #1A5C38)
+- [x] `npx create-next-app@latest` with App Router + TypeScript + Tailwind v4
+- [x] Install and configure next-intl
+- [x] Create `messages/fr.json` with initial keys
+- [x] Supabase Auth UI integration (magic link — Google OAuth deferred to pre-Phase 4)
+- [x] shadcn/ui install + theme configuration (Figma palette — see D-017)
+- [x] `frontend/.env.example` created — env vars split: frontend vs backend
+- [x] Basic layout: bottom nav bar (mobile), sidebar (desktop) — AppShell pattern
+- [x] Route protection middleware (redirect to /fr/login if unauthenticated)
 
 ### CI/CD
 
-- [ ] GitHub Actions: ruff + pytest on push
-- [ ] GitHub Actions: axe-core on PRs (basic pages)
-- [ ] GitHub Actions: TypeScript lint
+- [x] GitHub Actions: ruff + pytest — `ci-python.yml`
+- [x] GitHub Actions: TypeScript lint + axe-core — `ci-frontend.yml`
+- [x] GitHub Actions: dbt pipeline (bronze → silver) — `ci-dbt.yml`
 
 ---
 
-## Phase 2 — Draft Engine
+## 🔴 Phase 2 — Draft Engine (next)
 
 **Estimated duration:** 3–4 weeks
-**Prerequisite:** Phase 1 complete, PostgreSQL schema live.
+**Prerequisite:** Phase 1 complete ✅, PostgreSQL schema live ✅.
 
 ### Core draft logic
 
@@ -296,6 +299,6 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 
 ## Immediate next actions
 
-**→ Phase 0 (parallel):** await responses from Statscore and DSG. If no affordable provider confirmed within 1 week, activate Sportradar 30-day free trial.
-
-**→ Phase 1 (start now):** open a new conversation and begin with repo creation and PostgreSQL schema. The data source uncertainty does not block this.
+**→ Phase 0 (parallel):** await responses from Statscore and DSG.
+**→ Phase 2:** snake draft order algorithm — first step is the pure Python function, tested in isolation before any FastAPI integration.
+**→ Phase 1 — remaining:** Cron Coolify config (after first deploy to Hetzner).

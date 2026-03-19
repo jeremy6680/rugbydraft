@@ -1,0 +1,146 @@
+# .github/workflows/ci-python.yml
+#
+# CI pipeline for the Python backend.
+# Runs on every push and pull request that touches backend code.
+#
+# Jobs:
+#   lint   — ruff check + ruff format verification
+#   test   — pytest on backend/tests/
+#
+# Both jobs must pass for a PR to be mergeable.
+
+name: CI — Python Backend
+
+on:
+  push:
+    branches:
+      - main
+      - "phase/*"
+      - "feat/*"
+      - "fix/*"
+    paths:
+      # Trigger only when Python or backend config files change
+      - "backend/**"
+      - "connectors/**"
+      - "scripts/**"
+      - ".github/workflows/ci-python.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - "connectors/**"
+      - "scripts/**"
+      - ".github/workflows/ci-python.yml"
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # JOB 1: Lint — ruff check + ruff format
+  # ─────────────────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          # Cache key includes python version + requirements hash
+          # Cache is invalidated when requirements change
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements-dev.txt
+
+      - name: Run ruff lint check
+        run: |
+          # Check for lint errors (unused imports, undefined vars, etc.)
+          ruff check backend/ connectors/ scripts/
+
+      - name: Run ruff format check
+        run: |
+          # Verify formatting without modifying files
+          # Fails if any file would be reformatted
+          ruff format --check backend/ connectors/ scripts/
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # JOB 2: Test — pytest
+  # ─────────────────────────────────────────────────────────────────────────────
+  test:
+    name: Test (pytest)
+    runs-on: ubuntu-latest
+    # Runs independently of lint — separate feedback signals
+    # Change to `needs: lint` to skip tests when lint fails
+
+    env:
+      # ── Mock environment variables for CI ──────────────────────────────────
+      # Names must match EXACTLY the field names in backend/app/config.py.
+      # pydantic-settings will raise a ValidationError at startup if any
+      # required field is missing — the tests will fail before running.
+      #
+      # These values are syntactically valid but never used for real requests.
+      # Tests use TestClient (in-process) and mock Supabase calls.
+      SUPABASE_URL: "https://mock-project.supabase.co"
+      SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiJ9.mock"
+      SUPABASE_SERVICE_ROLE_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.mock"
+      # JWT secret used by AuthMiddleware to verify tokens.
+      # The malformed-token tests don't need a real secret — jose rejects them
+      # before signature verification.
+      SUPABASE_JWT_SECRET: "mock-jwt-secret-32-chars-minimum-x"
+      # Required by config.py — not used by any test in Phase 1
+      DATABASE_URL: "postgresql+asyncpg://mock:mock@localhost:5432/mockdb"
+      RUGBY_DATA_SOURCE: "mock"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # requirements-dev.txt includes -r requirements.txt — one command is enough
+          pip install -r backend/requirements-dev.txt
+
+      - name: Run pytest
+        # Run from repo root so that `from app.config import settings` resolves
+        # correctly via the working directory + pytest.ini testpaths = tests
+        working-directory: backend
+        run: |
+          # -v         : verbose — print each test name and result
+          # --tb=short : readable traceback in CI logs
+          # -x         : stop on first failure (fast feedback)
+          pytest tests/ -v --tb=short -x
+
+      - name: Upload pytest cache on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-results
+          path: backend/.pytest_cache/
+          retention-days: 7

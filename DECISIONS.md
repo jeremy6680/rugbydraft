@@ -388,3 +388,46 @@ configurable per league by the commissioner.
   defined as constants in the draft engine (Phase 2).
 - Validation happens in FastAPI at pick time — not in Pydantic models.
 - If a commissioner requests custom limits in beta feedback → implement in V2.
+
+---
+
+## D-017 — Brand color palette updated from CDC specification
+
+**Date:** 2026-03-19
+**Status:** Decided
+
+### Context
+
+The CDC (v3.1) specified `#1A5C38` (forest green) as the primary brand color.
+During Phase 1 frontend skeleton, a full color palette was designed in Figma
+("RugbyDraft Color Palette") with a revised brand direction.
+
+### Decision
+
+The Figma palette supersedes the CDC color specification. The four brand colors are:
+
+- **Crimson** `#872138` — primary (CTA, active states, brand identity)
+- **Rose** `#F2CAD3` — accent (hover states, soft backgrounds)
+- **Deep** `#21080E` — foreground (text, dark surfaces)
+- **Lime** `#99BF36` — secondary (scores, positive highlights, secondary CTA)
+
+Each color has a 7-shade scale defined in Figma and mapped to CSS custom properties
+in `frontend/src/app/globals.css` via Tailwind v4 `@theme inline`.
+
+The CDC document is **not updated** (confidential, gitignored). This entry is the
+source of truth for the color decision going forward.
+
+### Rationale
+
+The crimson/lime combination creates a stronger visual identity for a rugby app
+(intensity, energy, sport) compared to the original forest green. The complete
+7-shade palette enables a consistent design system across all components without
+needing to hardcode hex values outside of `globals.css`.
+
+### Impact
+
+- `frontend/src/app/globals.css` — CSS custom properties + Tailwind v4 theme mapping
+- `frontend/src/app/[locale]/login/page.tsx` — uses brand colors directly
+- CDC section on colors is superseded by this decision — do not revert to `#1A5C38`
+
+---

@@ -84,12 +84,14 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ### Frontend skeleton
 
-- [ ] `npx create-next-app@latest` with App Router + TypeScript + Tailwind v4
-- [ ] Install and configure next-intl
-- [ ] Create `messages/fr.json` with initial keys
-- [ ] Supabase Auth UI integration (Google OAuth + magic link)
-- [ ] Basic layout: bottom nav bar (mobile), sidebar (desktop)
-- [ ] shadcn/ui install + theme configuration (green #1A5C38)
+- [x] `npx create-next-app@latest` with App Router + TypeScript + Tailwind v4
+- [x] Install and configure next-intl
+- [x] Create `messages/fr.json` with initial keys
+- [x] Supabase Auth UI integration (magic link — Google OAuth deferred to pre-Phase 4)
+- [x] shadcn/ui install + theme configuration (Figma palette — see D-017)
+- [x] `frontend/.env.example` created — env vars split: frontend vs backend
+- [ ] Basic layout: bottom nav bar (mobile), sidebar (desktop) — **next session**
+- [ ] Route protection middleware (redirect to /fr/login if unauthenticated) — **next session**
 
 ### CI/CD
 
@@ -298,5 +300,5 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 ## Immediate next actions
 
 **→ Phase 0 (parallel):** await responses from Statscore and DSG.
-**→ Phase 1 — next step: Frontend skeleton** — Next.js 15, next-intl, shadcn/ui, Supabase Auth UI.
+**→ Phase 1 — next step: AppShell layout** — bottom nav (mobile) + sidebar (desktop) + route protection.
 **→ Phase 1 — remaining:** CI/CD (GitHub Actions), Cron Coolify config (after deploy).

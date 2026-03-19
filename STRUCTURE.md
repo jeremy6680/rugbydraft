@@ -183,17 +183,52 @@ Utility scripts. Not part of the application — run manually or in CI.
 
 ## frontend/
 
-> **Not yet created.** Will be initialized with `create-next-app` in Phase 4.
+Stack: Next.js 15 (App Router) + TypeScript + Tailwind CSS v4 + shadcn/ui + next-intl
 
-Stack: Next.js 15 (App Router) + TypeScript + Tailwind CSS v4 + shadcn/ui
+Initialized in Phase 1. Located in `frontend/` subdirectory of the public repo.
 
-- Framer Motion + next-intl.
-
-Key conventions (enforced from day one):
+### Key conventions
 
 - Zero hardcoded UI strings — all text via `t('key')` from next-intl
 - All translation strings in `messages/fr.json` (V1 — French only)
-- Locale stored on `users.locale`, not in the URL path
+- Locale is part of the URL path: `/fr/dashboard`, `/fr/draft`, etc.
+- `NEXT_PUBLIC_` prefix required for any env var accessed browser-side
+- Frontend env vars live in `frontend/.env.local` (never at repo root)
+
+### Structure
+
+```
+frontend/
+├── messages/
+│   └── fr.json                   # All French UI strings — never hardcode in components
+├── public/                        # Static assets (favicons, images)
+├── src/
+│   ├── app/
+│   │   ├── auth/
+│   │   │   └── callback/
+│   │   │       └── route.ts      # Supabase Auth callback — exchanges code for session
+│   │   └── [locale]/             # next-intl dynamic locale segment
+│   │       ├── layout.tsx        # Root layout: fonts, NextIntlClientProvider, body styles
+│   │       ├── page.tsx          # Temp home page (Phase 1 skeleton — replaced in Phase 4)
+│   │       ├── login/
+│   │       │   └── page.tsx      # Login page: split-screen brand + magic link form
+│   │       └── dashboard/
+│   │           └── page.tsx      # Dashboard placeholder (replaced in Phase 4)
+│   ├── components/
+│   │   └── auth/
+│   │       └── LoginForm.tsx     # Magic link form — Client Component
+│   ├── i18n/
+│   │   ├── routing.ts            # next-intl: supported locales, defaultLocale, localePrefix
+│   │   └── request.ts            # next-intl: server-side locale resolution + message loading
+│   └── lib/
+│       └── supabase/
+│           ├── client.ts         # createBrowserSupabaseClient — for Client Components
+│           └── server.ts         # createServerSupabaseClient — for Server Components
+├── middleware.ts                  # Combined: Supabase session refresh + next-intl routing
+├── .env.example                   # Frontend env vars template (NEXT_PUBLIC_SUPABASE_*)
+├── next.config.ts                 # Next.js config + next-intl plugin
+└── tsconfig.json                  # TypeScript strict mode, path alias @/*
+```
 
 ---
 

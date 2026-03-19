@@ -497,3 +497,45 @@ tested with 33 unit tests before any integration.
 - `get_pick_owner(pick_number, managers)` is O(1): no need to generate
   the full order to answer "who picks now?".
 - The DraftEngine will call these functions directly — no reimplementation.
+
+---
+
+## D-020 — DraftTimer as an isolated asyncio class, tested before DraftEngine integration
+
+**Date:** 2026-03-19
+**Status:** Accepted
+
+**Context:** The server-side pick timer is a critical component — expiration
+triggers autodraft automatically. It must be reliable before being wired into
+the DraftEngine.
+
+**Options considered:**
+
+- A) Implement the timer directly inside the DraftEngine class.
+- B) Extract it as a standalone asyncio class, tested in isolation first.
+
+**Decision:** Option B — `DraftTimer` in `backend/draft/timer.py`, tested
+with 22 unit tests before any DraftEngine integration.
+
+**Rationale:**
+
+- `asyncio.Task` + `asyncio.sleep` runs inside the FastAPI event loop —
+  zero thread overhead, clean cancellation via `Task.cancel()`.
+- `asyncio.get_event_loop().time()` (monotonic clock) is used for
+  `time_remaining` — immune to system clock changes and NTP adjustments.
+- The `on_expire` callback is async, allowing the DraftEngine to await
+  downstream effects (autodraft, Realtime broadcast) without blocking.
+- `asyncio.coroutine` was removed in Python 3.11 — tests use `async def`
+  dummy coroutines instead.
+- 22 tests cover: init, start, expiration, cancellation, idempotency,
+  and the CDC reconnection protocol (section 7.4).
+
+**Consequences:**
+
+- One `DraftTimer` instance per active pick slot.
+- The DraftEngine creates a new timer when a pick slot opens and calls
+  `cancel()` when the manager picks before expiration.
+- `time_remaining` is queryable at any point — used in the reconnection
+  state snapshot sent to reconnecting clients.
+
+---

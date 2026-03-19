@@ -129,13 +129,17 @@ jobs:
           # Wait for server to be ready before running axe-core (max 30s)
           npx wait-on http://localhost:3000 --timeout 30000
 
+      - name: Install Chrome and matching ChromeDriver
+        # axe-core/cli requires ChromeDriver. ubuntu-latest ships Chrome but
+        # the default ChromeDriver version may not match — browser-driver-manager
+        # installs a synchronized pair automatically.
+        run: npx browser-driver-manager install chrome
+
       - name: Run axe-core accessibility audit
         run: |
-          # Audit the login page — first public-facing page, no auth required
-          # --tags wcag2a,wcag2aa : enforce WCAG 2.1 AA (CDC requirement)
-          # --exit                : non-zero exit code on any violation (blocks PR)
-          # Note: axe-core detects ~30% of WCAG issues automatically.
-          # Manual review is still required for the remaining 70%.
+          # WCAG 2.1 AA audit on the login page (public, no auth required).
+          # --tags wcag2a,wcag2aa : WCAG 2.1 A + AA rules
+          # --exit                : non-zero exit code on any violation
           npx @axe-core/cli http://localhost:3000/fr/login \
             --tags wcag2a,wcag2aa \
             --exit

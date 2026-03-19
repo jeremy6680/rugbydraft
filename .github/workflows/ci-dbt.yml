@@ -38,7 +38,9 @@ jobs:
 
     env:
       DUCKDB_PATH: "/tmp/rugbydraft_ci.duckdb"
-      DUCKDB_RAW_PATH: "data/raw"
+      # Absolute path — dbt resolves relative paths from dbt_project/ working dir,
+      # but data/raw/ lives at repo root. $GITHUB_WORKSPACE is set by GitHub Actions.
+      DUCKDB_RAW_PATH: "${{ github.workspace }}/data/raw"
       RUGBY_DATA_SOURCE: "mock"
 
     steps:

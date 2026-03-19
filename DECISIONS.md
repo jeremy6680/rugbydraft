@@ -463,3 +463,37 @@ writing cookies directly onto it before returning.
 - middleware.ts order is: intlMiddleware → Supabase getUser → route guard
 - auth/callback/route.ts writes cookies onto redirectResponse, not cookieStore
 - /auth/callback is excluded from the middleware matcher entirely
+
+---
+
+## D-019 — Snake order as a pure function, tested before FastAPI integration
+
+**Date:** 2026-03-19
+**Status:** Accepted
+
+**Context:** The snake draft order algorithm is the foundational invariant of the
+draft engine. It needs to be correct before any FastAPI or database integration.
+
+**Options considered:**
+
+- A) Write the algorithm directly inside the DraftEngine class (FastAPI layer).
+- B) Extract it as a pure Python function, tested in full isolation first.
+
+**Decision:** Option B — pure function in `backend/draft/snake_order.py`,
+tested with 33 unit tests before any integration.
+
+**Rationale:**
+
+- A pure function `f(managers, num_rounds) → list[str]` is deterministic and
+  trivially testable with no infrastructure (no DB, no server, no async).
+- A bug in pick ordering (wrong manager gets a turn) would be catastrophic
+  and hard to debug inside a running FastAPI server.
+- The function is reused as-is by the DraftEngine — no duplication.
+- 33 tests cover 2–6 managers, full 30-round drafts, edge cases, and error paths.
+
+**Consequences:**
+
+- `snake_order.py` has zero external dependencies — pure Python stdlib.
+- `get_pick_owner(pick_number, managers)` is O(1): no need to generate
+  the full order to answer "who picks now?".
+- The DraftEngine will call these functions directly — no reimplementation.

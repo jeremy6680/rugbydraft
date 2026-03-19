@@ -68,9 +68,15 @@ backend/
 │       ├── user.py
 │       ├── player.py
 │       └── league.py
+├── draft/
+│   ├── __init__.py        # Draft engine package marker
+│   └── snake_order.py     # Pure snake draft order algorithm (no I/O) Functions: generate_snake_order, get_pick_owner, build_pick_slots, get_manager_picks
 ├── tests/
 │   ├── __init__.py
-│   └── test_health.py     # 8 tests — health endpoint + auth middleware
+│   ├── test_health.py     # 8 tests — health endpoint + auth middleware
+│   └── draft/
+│       ├── __init__.py    # Draft tests package marker
+│       └── snake_order.py # 33 unit tests for snake_order.py
 ├── pytest.ini             # pytest config — asyncio strict mode
 ├── requirements.txt       # Production dependencies (pinned to minor version)
 └── requirements-dev.txt   # Dev/CI dependencies (pytest, ruff, mypy)

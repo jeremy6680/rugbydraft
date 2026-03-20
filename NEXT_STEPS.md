@@ -1,7 +1,7 @@
 # NEXT_STEPS.md — RugbyDraft
 
-> Current status: Phase 2 in progress — Realtime broadcast complete, reconnection protocol next.
-> Last updated: 2026-03-19
+> Current status: Phase 2 in progress — Reconnection protocol complete. Draft Assistée next.
+> Last updated: 2026-03-20
 
 ---
 
@@ -125,9 +125,9 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ### Reconnection protocol (see DECISIONS.md D-001)
 
-- [ ] On reconnect: FastAPI sends full state snapshot (picks made, current pick, time remaining)
-- [ ] If manager reconnects during their turn with time remaining: they can pick
-- [ ] If timer expired during disconnection: autodraft pick is final
+- [x] On reconnect: FastAPI sends full state snapshot (picks made, current pick, time remaining)
+- [x] If manager reconnects during their turn with time remaining: they can pick
+- [x] If timer expired during disconnection: autodraft pick is final
 - [ ] Document recovery procedure for FastAPI restart mid-draft
 
 ### Draft Assistée (fallback mode)
@@ -146,10 +146,10 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ### Tests (mandatory — PRs blocked if failing)
 
-- [ ] Snake order for 2, 3, 4, 5, 6 managers
-- [ ] Timer timeout → autodraft activation
-- [ ] Client reconnection during pick
-- [ ] Client reconnection after pick (timer expired)
+- [x] Snake order for 2, 3, 4, 5, 6 managers
+- [x] Timer timeout → autodraft activation
+- [x] Client reconnection during pick
+- [x] Client reconnection after pick (timer expired)
 - [ ] Draft Assistée: picks logged correctly
 - [ ] Roster constraint validation (coverage minimums)
 
@@ -302,6 +302,5 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 ## Immediate next actions
 
 **→ Phase 0 (parallel):** await responses from Statscore and DSG.
-**→ Phase 2 (next session):** Supabase Realtime broadcast — wire \_broadcast()
-in DraftEngine to Supabase channel. Then Draft Assistée, then Ghost team.
+**→ Phase 2 (current):** Draft Assistée — commissioner fallback mode.
 **→ Phase 1 — remaining:** Cron Coolify config (after first deploy to Hetzner).

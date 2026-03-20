@@ -9,6 +9,9 @@ Run locally with:
     uvicorn app.main:app --reload --port 8000
 """
 
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -18,7 +21,8 @@ from slowapi.util import get_remote_address
 
 from app.config import settings
 from app.middleware.auth import AuthMiddleware
-from app.routers import health
+from app.routers import draft, health
+from draft.registry import DraftRegistry
 
 # ── Rate limiter setup ────────────────────────────────────────────────────────
 # Uses the client IP address as the rate limit key.
@@ -27,6 +31,32 @@ limiter = Limiter(
     key_func=get_remote_address,
     default_limits=[f"{settings.rate_limit_per_minute}/minute"],
 )
+
+
+# ── Lifespan — startup / shutdown ─────────────────────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """FastAPI lifespan context manager.
+
+    Initialises shared singletons at startup and cleans up on shutdown.
+    Using lifespan instead of @app.on_event (deprecated since FastAPI 0.93).
+
+    Startup:
+        - DraftRegistry: in-memory store of active DraftEngine instances.
+          All draft endpoints retrieve engines from here.
+
+    Shutdown:
+        - No explicit cleanup needed for the registry — active drafts are
+          in-memory only and do not require graceful teardown in V1.
+          (In production, consider persisting draft state to DB on shutdown.)
+    """
+    # Startup
+    app.state.draft_registry = DraftRegistry()
+
+    yield  # application runs here
+
+    # Shutdown (placeholder — no cleanup needed in V1)
+
 
 # ── FastAPI instance ──────────────────────────────────────────────────────────
 app = FastAPI(
@@ -37,6 +67,7 @@ app = FastAPI(
         "FastAPI is the authority of state for the draft. "
         "Supabase Realtime is a broadcast channel only."
     ),
+    lifespan=lifespan,
     # Disable docs in production — enable only in debug mode
     docs_url="/docs" if settings.debug else None,
     redoc_url="/redoc" if settings.debug else None,
@@ -66,6 +97,6 @@ app.add_middleware(AuthMiddleware)
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(health.router)
-# Phase 2: app.include_router(draft.router, prefix="/draft")
-# Phase 2: app.include_router(leagues.router, prefix="/leagues")
+app.include_router(draft.router)
 # Phase 3: app.include_router(players.router, prefix="/players")
+# Phase 3: app.include_router(leagues.router, prefix="/leagues")

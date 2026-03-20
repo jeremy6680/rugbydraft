@@ -63,6 +63,11 @@ backend/
 │   ├── routers/
 │   │   ├── __init__.py
 │   │   └── health.py      # GET /health — liveness probe (public, no JWT)
+│   ├── schemas/
+│   │ ├── **init**.py
+│   │ └── draft.py # Pydantic response models for draft endpoints (D-025)
+│   │ # DraftStateSnapshotResponse, PickRecordResponse
+│   │ # Mirrors internal DraftStateSnapshot dataclass
 │   └── models/            # Pydantic models — to be completed in Phase 2
 │       ├── __init__.py
 │       ├── user.py
@@ -89,14 +94,20 @@ backend/
 │   ├── broadcaster.py       # Broadcast layer — Supabase Realtime (D-024)
 │   │                        # BroadcasterProtocol (PEP 544), MockBroadcaster (tests),
 │   │                        # SupabaseBroadcaster (production, channel per league)
-│   └── engine.py            # DraftEngine — authority of state (D-001)
-│                            # Orchestrates snake_order, timer, validate_pick, autodraft
-│                            # broadcaster injected via __init__ (default: MockBroadcaster)
-│                            # DraftState, DraftStateSnapshot, PickRecord, DraftStatus
-│                            # asyncio.Lock prevents race conditions on submit_pick()
+│   ├── engine.py            # DraftEngine — authority of state (D-001)
+│   │                        # Orchestrates snake_order, timer, validate_pick, autodraft
+│   │                        # broadcaster injected via __init__ (default: MockBroadcaster)
+│   │                        # DraftState, DraftStateSnapshot, PickRecord, DraftStatus
+│   │                        # asyncio.Lock prevents race conditions on submit_pick()
+│   └── registry.py          # DraftRegistry — thread-safe dict league_id → DraftEngine
+│                            # Stored as app.state.draft_registry (FastAPI lifespan)
+│                            # register(), get(), remove(), active_league_ids()
 ├── tests/
 │   ├── __init__.py
-│   ├── test_health.py     # 8 tests — health endpoint + auth middleware
+│   ├── test_health.py       # 8 tests — health endpoint + auth middleware
+│   ├── test_reconnection.py # 4 tests — reconnection protocol (D-025)
+│   │                        # reconnect during own turn, after timer expired,
+│   │                        # while other manager picks, GET state no side effects
 │   └── draft/
 │       ├── __init__.py              # Draft tests package marker
 │       ├── test_snake_order.py      # 33 unit tests for snake_order.py

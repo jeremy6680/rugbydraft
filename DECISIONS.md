@@ -712,3 +712,60 @@ broadcast needed — far fewer messages, immune to dropped ticks.
 - \_broadcast(event: DraftEvent) replaces the stub \_broadcast() — callers pass typed events.
 - 8 new tests in test_engine.py validate the broadcast contract (event types + payloads).
 - Total test count: 114 → 122 after this step (26 in test_engine.py alone).
+
+---
+
+## D-025 — Reconnection protocol: DraftRegistry + 3 FastAPI endpoints
+
+**Date:** 2026-03-20
+**Status:** Accepted
+
+**Context:** The reconnection logic already lived in `connect_manager()` inside
+the DraftEngine (D-001, D-023). What was missing was the FastAPI layer to expose
+it: a registry to find active engines by league_id, and endpoints for clients to
+call on reconnection.
+
+**Decision:** Three components added:
+
+1. `backend/draft/registry.py` — `DraftRegistry`: thread-safe dict
+   `league_id → DraftEngine`, stored as `app.state.draft_registry` in the
+   FastAPI lifespan. Mutations (register, remove) protected by asyncio.Lock.
+   Reads (get) are lock-free (GIL + atomic dict lookup sufficient in CPython).
+
+2. `backend/app/schemas/draft.py` — `DraftStateSnapshotResponse` and
+   `PickRecordResponse`: Pydantic response models mirroring the internal
+   DraftStateSnapshot dataclass. Separation of API contract from engine internals.
+
+3. `backend/app/routers/draft.py` — three endpoints:
+   - `POST /draft/{league_id}/connect` — calls `connect_manager()`, returns snapshot.
+     Deactivates autodraft and starts a manual timer if reconnecting during own turn.
+   - `POST /draft/{league_id}/disconnect` — calls `disconnect_manager()`, returns 200.
+   - `GET /draft/{league_id}/state` — calls `get_state_snapshot()`, read-only.
+     Polling fallback when Supabase Realtime is unavailable.
+
+**FastAPI lifespan pattern:** `app.state.draft_registry = DraftRegistry()` is
+initialised in `@asynccontextmanager async def lifespan(app)` — the modern
+FastAPI pattern replacing deprecated `@app.on_event("startup")`.
+
+**HTTP 204 note:** FastAPI 0.115.12 raises an AssertionError when a POST endpoint
+declares `status_code=204` without `response_class=Response` — and even with it
+in some configurations. Decision: use HTTP 200 with `response_model=None` for
+disconnect. Functionally equivalent; avoids framework friction.
+
+**Test timing note (asyncio.create_task):** Test 1 (reconnect during own turn)
+initially used `await asyncio.sleep(0)` to schedule the autodraft task without
+executing it. In CPython 3.13, `sleep(0)` is sufficient to execute the task
+in some event loop configurations, causing the pick to be made before reconnect.
+Fixed by removing the sleep entirely — `connect_manager()` under its lock runs
+before the scheduled task can execute, which is the exact reconnection window
+the test is validating.
+
+**Consequences:**
+
+- `app/main.py` gains a lifespan context manager — `DraftRegistry` initialised at startup.
+- `draft.router` activated in `main.py` (was commented as "Phase 2").
+- 4 new tests in `tests/test_reconnection.py` — all pass (126/126 total).
+- New files: `registry.py`, `schemas/draft.py`, `routers/draft.py`.
+- Total test count: 122 → 126.
+
+---

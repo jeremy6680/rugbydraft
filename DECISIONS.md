@@ -847,3 +847,61 @@ never changes — it does not need to be updatable.
 - HTTP 409 Conflict for mode guard errors (already active / not active) — more
   precise than 422 which is reserved for data validation failures.
 - Total test count: 126 → 145 (19 new tests in test_assisted.py).
+
+---
+
+## D-027 — Ghost team identity as a structural property, not a runtime state
+
+**Date:** 2026-03-21
+**Status:** Accepted
+
+**Context:** Ghost teams (CDC section 11) are computer-managed teams that fill
+the bracket when the manager count is odd or below the competition minimum.
+They must always autodraft — never receive a timer, never take manual control.
+Two approaches were considered for implementing this constraint.
+
+**Options considered:**
+
+- A) Add ghost team IDs to `autodraft_managers` at draft start, like a
+  manager who never connected. Reuse the existing autodraft path entirely.
+- B) Treat ghost status as a structural property of the manager ID
+  (`ghost_manager_ids: frozenset[str]` on `DraftState`), separate from
+  the dynamic `autodraft_managers` set.
+
+**Decision:** Option B — ghost status is a structural (immutable) property,
+not a dynamic runtime state.
+
+**Rationale:**
+
+- `autodraft_managers` is a dynamic set: managers enter it when their timer
+  expires, and leave it when they reconnect. Ghost teams must never leave it.
+  Mixing structural and dynamic state in the same set creates a latent bug:
+  `connect_manager()` calls `autodraft_managers.discard(manager_id)`, which
+  would silently give a ghost team manual control if Option A were used.
+- A `frozenset` signals immutability to readers: ghost status never changes
+  during a draft. `autodraft_managers` changes constantly.
+- `is_ghost_id()` in `ghost_team.py` is the single source of truth for ghost
+  detection — one import, one check, used in `_start_current_turn()` and
+  `connect_manager()`.
+
+**Implementation:**
+
+- `backend/draft/ghost_team.py` — `GhostTeam` dataclass, `create_ghost_teams()`,
+  `ghost_teams_needed()`, `is_ghost_id()`, `generate_ghost_name()`.
+- `DraftState.ghost_manager_ids: frozenset[str]` — immutable after init.
+- `DraftStateSnapshot.ghost_manager_ids: list[str]` — exposed to the frontend
+  so it can render ghost teams differently (no timer, special avatar, etc.).
+- `_start_current_turn()`: `is_ghost_id(current_manager)` → immediate
+  `asyncio.create_task(autodraft)`, no timer started.
+- `connect_manager()`: `not is_ghost_id(manager_id)` guard prevents ghost
+  teams from ever deactivating their autodraft status.
+
+**Consequences:**
+
+- Phase 3 waiver/trade blocking: `is_ghost_id()` is already importable
+  anywhere. The waiver and trade endpoints simply call it as a guard.
+- Phase 3 IR release: ghost team injured player auto-release (D-010) will
+  use the same `is_ghost_id()` check to identify the source team.
+- Ghost teams have no preference list — `_preference_lists.get(ghost_id, [])`
+  returns `[]`, so autodraft always falls through to `default_value` source.
+  This is correct per CDC section 11.

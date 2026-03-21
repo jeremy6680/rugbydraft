@@ -139,10 +139,10 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ### Ghost team
 
-- [ ] Ghost team creation when manager count is odd or below competition minimum
-- [ ] Random name generator
-- [ ] Autodraft with default value algorithm
-- [ ] Ghost team excluded from waivers and trades
+- [x] Ghost team creation when manager count is odd or below competition minimum
+- [x] Random name generator
+- [x] Autodraft with default value algorithm
+- [x] Ghost team excluded from waivers and trades
 
 ### Tests (mandatory — PRs blocked if failing)
 

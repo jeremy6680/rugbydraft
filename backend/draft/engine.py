@@ -82,6 +82,7 @@ from draft.validate_pick import (
     _validate_roster_constraints,
     validate_pick,
 )
+from draft.ghost_team import is_ghost_id
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +147,8 @@ class DraftStateSnapshot:
     assisted_audit_log: list[AssistedPickAuditEntry] = field(  # NEW: full audit log
         default_factory=list
     )
+    ghost_manager_ids: list[str] = field(default_factory=list)
+
 
 
 @dataclass
@@ -177,7 +180,11 @@ class DraftState:
     # Managers currently connected (WebSocket / Realtime subscription active)
     connected_managers: set[str] = field(default_factory=set)
 
-    # NEW: Assisted Draft mode (CDC v3.1, section 7.5)
+    # Ghost team manager IDs — structurally always in autodraft (CDC section 11).
+    # Immutable after init: ghost status is an identity property, not a runtime state.
+    ghost_manager_ids: frozenset[str] = frozenset()
+
+    # Assisted Draft mode (CDC v3.1, section 7.5)
     assisted_mode: bool = False
     assisted_audit_log: list[AssistedPickAuditEntry] = field(default_factory=list)
 
@@ -239,6 +246,7 @@ class DraftEngine:
         pick_duration: float = DEFAULT_PICK_DURATION_SECONDS,
         preference_lists: Optional[dict[str, list[str]]] = None,
         broadcaster: Optional[BroadcasterProtocol] = None,
+        ghost_manager_ids: Optional[frozenset[str]] = None,
     ) -> None:
         """Initialise the DraftEngine. Does NOT start the draft.
 
@@ -246,21 +254,23 @@ class DraftEngine:
 
         Args:
             league_id: The league this draft belongs to.
-            manager_ids: All manager IDs. Will be shuffled for the draw.
+            manager_ids: All manager IDs (human + ghost). Will be shuffled.
             available_players: Full player pool, pre-sorted by value_score desc.
             competition_type: International or club (determines constraints).
-            commissioner_id: User ID of the league commissioner. Required to
-                             authorise assisted mode actions.
+            commissioner_id: User ID of the league commissioner.
             pick_duration: Seconds per pick. Default: 120s (CDC v3.1).
             preference_lists: Optional dict of manager_id → ordered player IDs.
-            broadcaster: Broadcast implementation. Defaults to MockBroadcaster
-                         (no-op safe for tests and local development).
+            broadcaster: Broadcast implementation. Defaults to MockBroadcaster.
+            ghost_manager_ids: IDs that belong to ghost teams. These are never
+                given a timer — they always autodraft immediately. Defaults to
+                frozenset() (no ghost teams).
         """
-        # Shuffle managers for random draw (CDC v3.1, section 7.2)
         shuffled = manager_ids.copy()
         random.shuffle(shuffled)
 
         draft_order = generate_snake_order(shuffled, num_rounds=DRAFT_NUM_ROUNDS)
+
+        resolved_ghost_ids: frozenset[str] = ghost_manager_ids or frozenset()
 
         self._state = DraftState(
             league_id=league_id,
@@ -269,6 +279,7 @@ class DraftEngine:
             competition_type=competition_type,
             commissioner_id=commissioner_id,
             pick_duration=pick_duration,
+            ghost_manager_ids=resolved_ghost_ids,
             rosters={
                 m: RosterSnapshot(
                     manager_id=m,
@@ -280,27 +291,20 @@ class DraftEngine:
             },
         )
 
-        # Player pool — sorted by value_score desc (caller's responsibility)
         self._available_players: list[PlayerSummary] = list(available_players)
-
-        # Preference lists — default to empty list per manager
         self._preference_lists: dict[str, list[str]] = preference_lists or {}
-
-        # Current active timer — one per pick slot (None in assisted mode)
         self._current_timer: Optional[DraftTimer] = None
-
-        # Concurrency lock — prevents simultaneous pick submissions
         self._lock = asyncio.Lock()
-
-        # Broadcaster — defaults to MockBroadcaster (safe no-op)
         self._broadcaster: BroadcasterProtocol = broadcaster or MockBroadcaster()
 
         logger.info(
-            "DraftEngine created: league=%s, managers=%s, total_picks=%d, commissioner=%s",
+            "DraftEngine created: league=%s, managers=%s, total_picks=%d, "
+            "commissioner=%s, ghost_teams=%s",
             league_id,
             shuffled,
             self._state.total_picks,
             commissioner_id,
+            list(resolved_ghost_ids),
         )
 
     # ------------------------------------------------------------------
@@ -441,10 +445,13 @@ class DraftEngine:
             autodraft_deactivated = False
 
             # Give control back if reconnecting during own turn before pick is made.
+            # Guard: ghost teams can never take manual control — they are structurally
+            # always in autodraft. is_ghost_id() is the single source of truth.
             is_own_turn = (
                 self._state.status == DraftStatus.IN_PROGRESS
                 and self._state.current_manager_id == manager_id
                 and manager_id in self._state.autodraft_managers
+                and not is_ghost_id(manager_id)  # ghost teams never take manual control
             )
             pick_not_yet_made = not any(
                 p.pick_number == self._state.current_pick_number
@@ -693,6 +700,8 @@ class DraftEngine:
             connected_managers=list(self._state.connected_managers),
             assisted_mode=self._state.assisted_mode,
             assisted_audit_log=list(self._state.assisted_audit_log),
+            ghost_manager_ids=list(self._state.ghost_manager_ids),
+
         )
 
     # ------------------------------------------------------------------
@@ -727,6 +736,18 @@ class DraftEngine:
                 self._state.current_pick_number,
                 current_manager,
             )
+            return
+
+        # Ghost team: always autodraft immediately, never start a timer.
+        # This is a structural property (CDC section 11) — ghost teams have no
+        # human manager to wait for. is_ghost_id() is the single source of truth.
+        if is_ghost_id(current_manager):
+            logger.debug(
+                "Pick %d: ghost team '%s' — scheduling immediate autodraft",
+                self._state.current_pick_number,
+                current_manager,
+            )
+            asyncio.create_task(self._run_autodraft_for_current_pick())
             return
 
         if current_manager in self._state.autodraft_managers:

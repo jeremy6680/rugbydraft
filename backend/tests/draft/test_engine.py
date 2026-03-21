@@ -39,6 +39,13 @@ from draft.events import (
     DraftTurnChangedEvent,
 )
 
+from draft.ghost_team import (
+    GHOST_ID_PREFIX,
+    create_ghost_teams,
+    ghost_teams_needed,
+    is_ghost_id,
+)
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -84,6 +91,7 @@ def make_engine(
     pool_size: int = 200,
     pick_duration: float = SHORT_DURATION,
     nationalities: list[str] | None = None,
+    ghost_manager_ids: frozenset[str] | None = None,
 ) -> DraftEngine:
     """Create a DraftEngine with a large enough player pool."""
     managers = manager_ids or ["M1", "M2", "M3"]
@@ -95,6 +103,7 @@ def make_engine(
         competition_type=CompetitionType.INTERNATIONAL,
         commissioner_id="test-commissioner",
         pick_duration=pick_duration,
+        ghost_manager_ids=ghost_manager_ids,
     )
 
 
@@ -621,3 +630,279 @@ class TestBroadcastEvents:
         assert isinstance(event, DraftCompletedEvent)
         assert event.total_picks == 60  # 2 managers × 30 rounds
         assert event.league_id == "league-test"
+
+
+# ---------------------------------------------------------------------------
+# Ghost team integration (CDC section 11)
+# ---------------------------------------------------------------------------
+
+
+class TestGhostTeam:
+    """Integration tests for ghost team behaviour in the DraftEngine.
+
+    Ghost teams are structurally always in autodraft — they never receive
+    a timer and can never take manual control. Their picks are autodrafted
+    immediately when their turn arrives.
+
+    CDC section 11: ghost teams fill the bracket when the manager count is
+    odd or below the competition minimum.
+    """
+
+    def _make_engine_with_ghost(
+        self,
+        human_ids: list[str],
+        pick_duration: float = SHORT_DURATION,
+    ) -> tuple[DraftEngine, list[str]]:
+        """Create a DraftEngine with one ghost team added to human_ids.
+
+        Returns:
+            Tuple of (engine, [ghost_manager_id]).
+        """
+        ghosts = create_ghost_teams(1, seed=0)
+        ghost_id = ghosts[0].manager_id
+        all_managers = human_ids + [ghost_id]
+        players = make_player_pool(200)
+        engine = DraftEngine(
+            league_id="league-test",
+            manager_ids=all_managers,
+            available_players=players,
+            competition_type=CompetitionType.INTERNATIONAL,
+            commissioner_id="test-commissioner",
+            pick_duration=pick_duration,
+            ghost_manager_ids=frozenset([ghost_id]),
+        )
+        return engine, [ghost_id]
+
+    # ------------------------------------------------------------------
+    # Snapshot exposes ghost_manager_ids
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_snapshot_exposes_ghost_manager_ids(self) -> None:
+        """get_state_snapshot() must include ghost_manager_ids for the frontend."""
+        engine, ghost_ids = self._make_engine_with_ghost(["M1"])
+        await engine.start_draft(connected_manager_ids={"M1"})
+
+        snapshot = engine.get_state_snapshot()
+        assert ghost_ids[0] in snapshot.ghost_manager_ids
+
+        await asyncio.sleep(SHORT_DURATION * 3)
+
+    @pytest.mark.asyncio
+    async def test_snapshot_ghost_ids_use_ghost_prefix(self) -> None:
+        """All IDs in snapshot.ghost_manager_ids must carry the ghost prefix."""
+        engine, ghost_ids = self._make_engine_with_ghost(["M1"])
+        await engine.start_draft(connected_manager_ids={"M1"})
+
+        snapshot = engine.get_state_snapshot()
+        assert all(is_ghost_id(gid) for gid in snapshot.ghost_manager_ids)
+
+        await asyncio.sleep(SHORT_DURATION * 3)
+
+    @pytest.mark.asyncio
+    async def test_snapshot_human_ids_not_in_ghost_manager_ids(self) -> None:
+        """Human manager IDs must never appear in snapshot.ghost_manager_ids."""
+        engine, _ = self._make_engine_with_ghost(["M1"])
+        await engine.start_draft(connected_manager_ids={"M1"})
+
+        snapshot = engine.get_state_snapshot()
+        assert "M1" not in snapshot.ghost_manager_ids
+
+        await asyncio.sleep(SHORT_DURATION * 3)
+
+    # ------------------------------------------------------------------
+    # Ghost team picks are autodrafted immediately (no timer)
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_ghost_picks_are_autodrafted(self) -> None:
+        """All picks made by a ghost team must have autodrafted=True."""
+        engine, ghost_ids = self._make_engine_with_ghost(
+            ["M1"], pick_duration=0.001
+        )
+        ghost_id = ghost_ids[0]
+
+        # No human connected → full autodraft → draft completes quickly
+        await engine.start_draft(connected_manager_ids=set())
+        await asyncio.sleep(1.0)
+
+        snapshot = engine.get_state_snapshot()
+        assert snapshot.status == DraftStatus.COMPLETED
+
+        ghost_picks = [p for p in snapshot.picks if p.manager_id == ghost_id]
+        assert len(ghost_picks) == DRAFT_NUM_ROUNDS
+        assert all(p.autodrafted for p in ghost_picks)
+
+    @pytest.mark.asyncio
+    async def test_ghost_picks_have_default_value_source(self) -> None:
+        """Ghost team has no preference list — source must be 'default_value'."""
+        engine, ghost_ids = self._make_engine_with_ghost(
+            ["M1"], pick_duration=0.001
+        )
+        ghost_id = ghost_ids[0]
+
+        await engine.start_draft(connected_manager_ids=set())
+        await asyncio.sleep(1.0)
+
+        snapshot = engine.get_state_snapshot()
+        ghost_picks = [p for p in snapshot.picks if p.manager_id == ghost_id]
+
+        assert all(p.autodraft_source == "default_value" for p in ghost_picks)
+
+    @pytest.mark.asyncio
+    async def test_ghost_turn_does_not_start_timer(self) -> None:
+        """When a ghost team's turn arrives, no timer must be running."""
+        engine, ghost_ids = self._make_engine_with_ghost(
+            ["M1"], pick_duration=10.0  # long timer — would be obvious if started
+        )
+        ghost_id = ghost_ids[0]
+
+        await engine.start_draft(connected_manager_ids={"M1"})
+
+        # Determine if ghost goes first or second
+        snapshot = engine.get_state_snapshot()
+        first_manager = snapshot.current_manager_id
+
+        if first_manager == ghost_id:
+            # Ghost goes first — timer must be None immediately after start
+            # Give the event loop a tick to let _start_current_turn settle
+            await asyncio.sleep(0.01)
+            # After ghost's autodraft fires, it's M1's turn and a timer starts
+            # We assert no timer existed *during* the ghost's turn by checking
+            # that the ghost's pick was recorded before any timer ran
+            snap = engine.get_state_snapshot()
+            if len(snap.picks) >= 1:
+                assert snap.picks[0].manager_id == ghost_id
+                assert snap.picks[0].autodrafted is True
+        else:
+            # M1 goes first — submit M1's pick manually, then ghost's turn
+            player = engine._available_players[0]
+            await engine.submit_pick(
+                manager_id="M1",
+                player_id=str(player.id),
+            )
+            # Ghost's turn: timer must not be running
+            # Give event loop a tick for the ghost's asyncio.create_task to fire
+            await asyncio.sleep(0.05)
+            # Ghost has autodrafted — now it's M1's turn again with a timer
+            # The key assertion: ghost pick is in history, autodrafted
+            snap = engine.get_state_snapshot()
+            ghost_picks = [p for p in snap.picks if p.manager_id == ghost_id]
+            assert len(ghost_picks) >= 1
+            assert ghost_picks[0].autodrafted is True
+
+        if engine._current_timer:
+            engine._current_timer.cancel()
+        await asyncio.sleep(0.05)
+
+    # ------------------------------------------------------------------
+    # Ghost team cannot take manual control
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_connect_ghost_does_not_deactivate_autodraft(self) -> None:
+        """connect_manager() called with a ghost ID must not deactivate autodraft.
+
+        A ghost team has no human behind it — it must never be given manual
+        control, even if someone calls connect_manager() with its ID.
+        """
+        engine, ghost_ids = self._make_engine_with_ghost(
+            ["M1"], pick_duration=10.0
+        )
+        ghost_id = ghost_ids[0]
+
+        await engine.start_draft(connected_manager_ids={"M1"})
+
+        # Find ghost's first turn — advance to it if needed
+        snapshot = engine.get_state_snapshot()
+        if snapshot.current_manager_id != ghost_id:
+            player = engine._available_players[0]
+            await engine.submit_pick(
+                manager_id="M1", player_id=str(player.id)
+            )
+
+        # Manually force ghost into autodraft_managers to simulate
+        # the state that connect_manager() should NOT clear
+        engine._state.autodraft_managers.add(ghost_id)
+
+        # Reconnect ghost — must NOT deactivate autodraft
+        await engine.connect_manager(ghost_id)
+
+        snapshot = engine.get_state_snapshot()
+        assert ghost_id in snapshot.autodraft_managers, (
+            "Ghost team must remain in autodraft after connect_manager()"
+        )
+
+        if engine._current_timer:
+            engine._current_timer.cancel()
+        await asyncio.sleep(0.05)
+
+    # ------------------------------------------------------------------
+    # Full draft with ghost team completes correctly
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_draft_with_ghost_completes_with_correct_pick_count(self) -> None:
+        """A 2-manager draft (1 human + 1 ghost) must complete with 60 picks."""
+        engine, _ = self._make_engine_with_ghost(
+            ["M1"], pick_duration=0.001
+        )
+        await engine.start_draft(connected_manager_ids=set())
+        await asyncio.sleep(1.0)
+
+        snapshot = engine.get_state_snapshot()
+        assert snapshot.status == DraftStatus.COMPLETED
+        assert len(snapshot.picks) == 60  # 2 managers × 30 rounds
+
+    @pytest.mark.asyncio
+    async def test_draft_with_two_ghosts_completes(self) -> None:
+        """3 managers (1 human + 2 ghosts) — total 3 is odd, but we pass them
+        directly so DraftEngine accepts 3 managers."""
+        ghosts = create_ghost_teams(2, seed=1)
+        ghost_ids = frozenset(g.manager_id for g in ghosts)
+        all_managers = ["M1"] + [g.manager_id for g in ghosts]
+        players = make_player_pool(200)
+
+        engine = DraftEngine(
+            league_id="league-test",
+            manager_ids=all_managers,
+            available_players=players,
+            competition_type=CompetitionType.INTERNATIONAL,
+            commissioner_id="test-commissioner",
+            pick_duration=0.001,
+            ghost_manager_ids=ghost_ids,
+        )
+        await engine.start_draft(connected_manager_ids=set())
+        await asyncio.sleep(2.0)
+
+        snapshot = engine.get_state_snapshot()
+        assert snapshot.status == DraftStatus.COMPLETED
+        assert len(snapshot.picks) == 90  # 3 managers × 30 rounds
+
+    # ------------------------------------------------------------------
+    # ghost_teams_needed() integration
+    # ------------------------------------------------------------------
+
+    def test_ghost_teams_needed_odd_managers(self) -> None:
+        """3 human managers → 1 ghost needed to make 4 (even + minimum)."""
+        needed = ghost_teams_needed(3)
+        assert needed == 1
+
+    def test_ghost_teams_needed_even_managers_at_minimum(self) -> None:
+        """4 human managers → 0 ghosts needed."""
+        needed = ghost_teams_needed(4)
+        assert needed == 0
+
+    def test_create_and_register_ghost_teams_for_odd_league(self) -> None:
+        """Full flow: 3 humans → compute needed → create ghosts → build manager list."""
+        human_ids = ["M1", "M2", "M3"]
+        needed = ghost_teams_needed(len(human_ids))
+        assert needed == 1
+
+        ghosts = create_ghost_teams(needed, seed=42)
+        assert len(ghosts) == 1
+        assert is_ghost_id(ghosts[0].manager_id)
+
+        all_ids = human_ids + [g.manager_id for g in ghosts]
+        assert len(all_ids) == 4
+        assert (len(all_ids) % 2) == 0

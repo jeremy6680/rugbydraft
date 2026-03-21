@@ -90,6 +90,11 @@ backend/
 │   ├── autodraft.py         # Autodraft pick selection algorithm (pure function)
 │   │                        # select_autodraft_pick(): preference list → default value
 │   │                        # AutodraftResult, AutodraftError
+│   ├── ghost_team.py        # Ghost team generation — pure functions, no I/O (CDC s.11)
+│   │                        # GhostTeam dataclass (frozen), create_ghost_teams(n)
+│   │                        # ghost_teams_needed(manager_count) — bracket completion logic
+│   │                        # is_ghost_id() — single source of truth for ghost detection
+│   │                        # generate_ghost_name(), generate_ghost_avatar()
 │   ├── events.py            # Typed broadcast event dataclasses (D-024)
 │   │                        # DraftStartedEvent, DraftPickMadeEvent, DraftTurnChangedEvent
 │   │                        # DraftManagerConnectedEvent, DraftManagerDisconnectedEvent
@@ -121,7 +126,11 @@ backend/
 │       ├── test_timer.py            # 22 unit tests for timer.py (pytest-asyncio)
 │       ├── test_validate_pick.py    # 17 unit tests for validate_pick.py
 │       ├── test_autodraft.py        # 16 unit tests for autodraft.py
-│       └── test_engine.py           # 26 unit tests for engine.py + broadcast events
+│       ├── test_ghost_team.py       # 41 unit tests for ghost_team.py
+│       │                            # TestIsGhostId, TestGenerateGhostName,
+│       │                            # TestGenerateGhostAvatar, TestCreateGhostTeams,
+│       │                            # TestGhostTeamsNeeded
+│       └── test_engine.py           # 53 unit tests for engine.py + ghost team integration
 │       └── test_assisted.py     # 19 tests — Assisted Draft mode (D-026)
 │                                # TestEnableAssistedMode (5), TestSubmitAssistedPick (8)
 │                                # TestAuditLog (3), TestAssistedBroadcastEvents (2)

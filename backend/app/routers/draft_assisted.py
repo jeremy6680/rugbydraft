@@ -36,13 +36,11 @@ from pydantic import BaseModel, Field
 
 from app.schemas.draft import PickRecordResponse
 from draft.assisted import (
-    AssistedDraftError,
     AssistedModeAlreadyActiveError,
     AssistedModeNotActiveError,
     AssistedPickAuditEntry,
     NotCommissionerError,
 )
-from draft.engine import DraftStatus
 from draft.registry import DraftRegistry
 from draft.validate_pick import PickValidationError
 

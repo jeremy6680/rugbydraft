@@ -28,7 +28,7 @@ import logging
 from dataclasses import dataclass
 
 from app.models.league import CompetitionType
-from app.models.player import AvailabilityStatus, PlayerSummary
+from app.models.player import PlayerSummary
 from draft.validate_pick import PickValidationError, RosterSnapshot, _validate_roster_constraints
 
 logger = logging.getLogger(__name__)

@@ -55,7 +55,7 @@ def assert_snake_invariants(managers: list[str], num_rounds: int) -> None:
         )
 
     # Invariant 3: round 1 is original order
-    assert order[:n] == managers, f"Round 1 should match original order"
+    assert order[:n] == managers, "Round 1 should match original order"
 
     # Invariant 4: round 2 is reversed
     if num_rounds >= 2:

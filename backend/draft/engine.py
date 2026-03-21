@@ -53,9 +53,7 @@ from typing import Optional
 from app.models.league import CompetitionType
 from app.models.player import PlayerSummary
 from draft.assisted import (
-    AssistedDraftError,
     AssistedPickAuditEntry,
-    AssistedModeAlreadyActiveError,
     build_audit_entry,
     validate_assisted_mode_active,
     validate_assisted_mode_not_already_active,
@@ -76,10 +74,7 @@ from draft.events import (
 from draft.snake_order import generate_snake_order
 from draft.timer import DEFAULT_PICK_DURATION_SECONDS, DraftTimer
 from draft.validate_pick import (
-    PickValidationError,
     RosterSnapshot,
-    _validate_player_availability,
-    _validate_roster_constraints,
     validate_pick,
 )
 from draft.ghost_team import is_ghost_id

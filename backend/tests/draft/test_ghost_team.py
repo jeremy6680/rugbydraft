@@ -9,7 +9,6 @@ import pytest
 
 from draft.ghost_team import (
     GHOST_ID_PREFIX,
-    GhostTeam,
     _GHOST_AVATARS,
     _GHOST_CITIES,
     _GHOST_NAME_TEMPLATES,

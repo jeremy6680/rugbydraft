@@ -40,7 +40,6 @@ from draft.events import (
 )
 
 from draft.ghost_team import (
-    GHOST_ID_PREFIX,
     create_ghost_teams,
     ghost_teams_needed,
     is_ghost_id,

@@ -23,11 +23,9 @@ Design note:
 from __future__ import annotations
 
 import uuid
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.models.league import CompetitionType
 from app.models.player import AvailabilityStatus, PlayerSummary, PositionType
 from draft.roster_coverage import (
     BENCH_COVERAGE_MINIMUMS,
@@ -250,8 +248,6 @@ class TestMissingPositionCoverage:
             "wing":      _build_player([PositionType.WING]),
             "fullback":  _build_player([PositionType.FULLBACK]),
         }
-        # 5 libre slots — wings, no minimum
-        libres = [_build_player([PositionType.WING])] * 5
 
         # Build bench without the missing group's player(s)
         bench: list[PlayerSummary] = []

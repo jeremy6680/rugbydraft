@@ -128,7 +128,7 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 - [x] On reconnect: FastAPI sends full state snapshot (picks made, current pick, time remaining)
 - [x] If manager reconnects during their turn with time remaining: they can pick
 - [x] If timer expired during disconnection: autodraft pick is final
-- [ ] Document recovery procedure for FastAPI restart mid-draft
+- [x] Document recovery procedure for FastAPI restart mid-draft
 
 ### Draft Assistée (fallback mode)
 
@@ -151,7 +151,7 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 - [x] Client reconnection during pick
 - [x] Client reconnection after pick (timer expired)
 - [x] Draft Assistée: picks logged correctly
-- [ ] Roster constraint validation (coverage minimums)
+- [x] Roster constraint validation (coverage minimums)
 
 ---
 

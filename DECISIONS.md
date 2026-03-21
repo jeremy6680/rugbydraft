@@ -905,3 +905,129 @@ not a dynamic runtime state.
 - Ghost teams have no preference list — `_preference_lists.get(ghost_id, [])`
   returns `[]`, so autodraft always falls through to `default_value` source.
   This is correct per CDC section 11.
+
+---
+
+## D-028 — Post-draft roster coverage validation: warning, not hard block
+
+**Date:** 2026-03-21
+**Status:** Accepted
+
+**Context:** CDC v3.1 section 6.2 defines minimum bench coverage requirements
+(e.g. 2 props, 1 hooker, 1 lock, etc.). The question was: should a coverage
+failure at draft completion block the draft from completing, or log a warning
+and let the draft complete anyway?
+
+**Options considered:**
+
+- A) Hard block — refuse to mark the draft as COMPLETED if any roster fails
+  coverage. Commissioner must manually correct the roster before proceeding.
+- B) Warning only — mark the draft COMPLETED regardless, log the coverage
+  failure, notify the commissioner. Picks are final.
+
+**Decision:** Option B — warning only in V1.
+
+**Rationale:**
+
+- Coverage failures in practice only occur via autodraft (human managers
+  are guided by the frontend's real-time coverage indicator in Phase 4).
+- Blocking the draft would strand all managers in a completed-but-not-completed
+  state with no UI to fix it — worse UX than a warning.
+- The autodraft algorithm (Phase 2) does not yet enforce coverage minimums
+  when selecting players. Enforcing coverage at autodraft selection time
+  is the correct long-term fix — deferred to Phase 3 or V2 (see consequences).
+- Picks are final by design (CDC v3.1, section 7) — no rollback mechanism exists.
+
+**Consequences:**
+
+- `DraftEngine._complete_draft()` calls `validate_roster_coverage()` per manager
+  and logs `WARNING` on failure. The draft completes regardless.
+- A `TODO` comment marks the broadcast point for Phase 4:
+  `RosterCoverageWarningEvent` will alert the commissioner in the UI.
+- Future improvement (V2): autodraft `select_autodraft_pick()` should enforce
+  coverage minimums in its selection loop, not just nationality/club limits.
+  This would prevent coverage failures from occurring at all.
+
+---
+
+## D-029 — FastAPI restart mid-draft: recovery procedure
+
+**Date:** 2026-03-21
+**Status:** Accepted
+
+**Context:** DraftEngine state is held entirely in memory (D-001). If the
+FastAPI process restarts mid-draft (crash, deploy, OOM kill), all in-memory
+state is lost. Clients will attempt to reconnect but the engine is gone.
+This is the highest-severity operational risk in Phase 2.
+
+**The problem in detail:**
+
+```
+Draft running: pick 14/90, timer ticking for manager M2.
+FastAPI process killed (OOM / deploy / crash).
+M2's browser is still open — timer ticks down client-side.
+M1 submits a pick → 503 / connection refused.
+Supabase Realtime channel goes silent.
+All managers see a frozen draft room.
+```
+
+**What is persisted vs lost:**
+
+| Data                  | Persisted                                | Lost on restart    |
+| --------------------- | ---------------------------------------- | ------------------ |
+| Picks already made    | ✅ `draft_picks` table                   | —                  |
+| Current pick number   | ✅ `drafts.current_pick_number`          | —                  |
+| Draft status          | ✅ `drafts.status`                       | —                  |
+| Assisted audit log    | ✅ `draft_picks.entered_by_commissioner` | —                  |
+| In-memory timer state | ❌ —                                     | ✅ lost            |
+| Autodraft manager set | ❌ —                                     | ✅ lost            |
+| Connected manager set | ❌ —                                     | ✅ lost            |
+| Available player pool | ❌ —                                     | ✅ rebuilt from DB |
+
+**Decision:** Manual recovery procedure in V1. Automated recovery deferred to V2.
+
+**V1 recovery procedure (commissioner-initiated):**
+
+1. **Detect the restart** — clients see Realtime channel go silent +
+   HTTP 503 on pick submission. FastAPI health endpoint (`GET /health`)
+   returns 200 once the process is back up.
+
+2. **Commissioner switches to Assisted Draft** — once FastAPI is back,
+   the commissioner calls `POST /draft/{league_id}/assisted/enable`.
+   This is the intended fallback for any draft disruption (CDC v3.1, section 7.5).
+
+3. **Engine reconstruction** — the `DraftRegistry` is empty after restart.
+   The first call to any draft endpoint triggers engine reconstruction:
+   - Read `drafts` table: status, current_pick_number, pick_duration,
+     competition_type, commissioner_id.
+   - Read `draft_picks` table: all picks already made → rebuild
+     `drafted_player_ids`, `rosters`, `picks` list.
+   - Read `league_members` table: manager list, ghost team IDs.
+   - Reconstruct `draft_order` via `generate_snake_order()` with the
+     same shuffled manager order (stored in `drafts.manager_order` — JSONB).
+   - Set `assisted_mode = True` immediately (step 2 above).
+   - All managers start as disconnected — they reconnect via `POST /connect`.
+
+4. **Resume** — commissioner enters remaining picks via Assisted Draft.
+   No timer, no autodraft race condition. Audit log shows the restart gap.
+
+**Implementation status:** Reconstruction logic (`reconstruct_engine_from_db()`)
+is NOT implemented in Phase 2. The procedure above defines the contract —
+implementation is a Phase 3 prerequisite before first real draft.
+
+**What must be added to the DB schema before Phase 3:**
+
+- `drafts.manager_order` — JSONB array storing the shuffled manager order
+  after the random draw. Without this, `generate_snake_order()` cannot
+  produce the same draft order after a restart.
+  → Migration required: `ALTER TABLE drafts ADD COLUMN manager_order JSONB`.
+
+**Consequences:**
+
+- Phase 2 drafts (localhost testing, demo) accept the restart risk — data
+  loss is acceptable at this stage.
+- Before first real draft (Phase 3 / beta): `reconstruct_engine_from_db()`
+  must be implemented and tested, and `drafts.manager_order` migration applied.
+- The `TODO` in `DraftRegistry` marks the reconstruction hook point.
+- CI test required in Phase 3: simulate restart at pick N, reconstruct,
+  verify remaining picks complete correctly.

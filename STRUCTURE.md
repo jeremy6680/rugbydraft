@@ -106,6 +106,10 @@ backend/
 │   │                        # AssistedPickAuditEntry, AssistedDraftError subtypes
 │   │                        # validate_commissioner, validate_assisted_mode_active
 │   │                        # build_audit_entry — all pure functions, no I/O
+│   ├── roster_coverage.py   # Post-draft roster coverage validation (CDC 6.2)
+│   │                        # validate_roster_coverage(): pure function, no I/O
+│   │                        # RosterCoverageResult, RosterCoverageError,
+│   │                        # RosterIncompleteError — called by _complete_draft()
 │   ├── engine.py            # DraftEngine — authority of state (D-001)
 │   │                        # Orchestrates snake_order, timer, validate_pick, autodraft
 │   │                        # broadcaster injected via __init__ (default: MockBroadcaster)
@@ -130,11 +134,14 @@ backend/
 │       │                            # TestIsGhostId, TestGenerateGhostName,
 │       │                            # TestGenerateGhostAvatar, TestCreateGhostTeams,
 │       │                            # TestGhostTeamsNeeded
-│       └── test_engine.py           # 53 unit tests for engine.py + ghost team integration
-│       └── test_assisted.py     # 19 tests — Assisted Draft mode (D-026)
-│                                # TestEnableAssistedMode (5), TestSubmitAssistedPick (8)
-│                                # TestAuditLog (3), TestAssistedBroadcastEvents (2)
-│                                # TestFullAssistedDraftFlow (1)
+│       ├── test_engine.py           # 53 unit tests for engine.py + ghost team integration
+│       ├── test_assisted.py         # 19 tests — Assisted Draft mode (D-026)
+│       │                            # TestEnableAssistedMode (5), TestSubmitAssistedPick (8)
+│       │                            # TestAuditLog (3), TestAssistedBroadcastEvents (2)
+│       │                            # TestFullAssistedDraftFlow (1)
+│       └── test_roster_constraints.py # 14 tests — bench coverage validation
+│                                    # TestValidRosters (4), TestMissingPositionCoverage (5)
+│                                    # TestMultiPositionCoverage (2), TestIncompleteRoster (3)
 ├── pytest.ini             # pytest config — asyncio strict mode
 ├── requirements.txt       # Production dependencies (pinned to minor version)
 └── requirements-dev.txt   # Dev/CI dependencies (pytest, ruff, mypy)

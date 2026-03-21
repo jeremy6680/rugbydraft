@@ -63,6 +63,9 @@ backend/
 │   ├── routers/
 │   │   ├── __init__.py
 │   │   └── health.py      # GET /health — liveness probe (public, no JWT)
+│   │   ├── draft.py           # POST /connect, POST /disconnect, GET /state
+│   │   └── draft_assisted.py  # POST /assisted/enable, POST /assisted/pick
+│   │                          # GET /assisted/log — commissioner-only (403 if not)
 │   ├── schemas/
 │   │ ├── **init**.py
 │   │ └── draft.py # Pydantic response models for draft endpoints (D-025)
@@ -94,6 +97,10 @@ backend/
 │   ├── broadcaster.py       # Broadcast layer — Supabase Realtime (D-024)
 │   │                        # BroadcasterProtocol (PEP 544), MockBroadcaster (tests),
 │   │                        # SupabaseBroadcaster (production, channel per league)
+│   ├── assisted.py          # Assisted Draft pure logic (CDC 7.5)
+│   │                        # AssistedPickAuditEntry, AssistedDraftError subtypes
+│   │                        # validate_commissioner, validate_assisted_mode_active
+│   │                        # build_audit_entry — all pure functions, no I/O
 │   ├── engine.py            # DraftEngine — authority of state (D-001)
 │   │                        # Orchestrates snake_order, timer, validate_pick, autodraft
 │   │                        # broadcaster injected via __init__ (default: MockBroadcaster)
@@ -115,6 +122,10 @@ backend/
 │       ├── test_validate_pick.py    # 17 unit tests for validate_pick.py
 │       ├── test_autodraft.py        # 16 unit tests for autodraft.py
 │       └── test_engine.py           # 26 unit tests for engine.py + broadcast events
+│       └── test_assisted.py     # 19 tests — Assisted Draft mode (D-026)
+│                                # TestEnableAssistedMode (5), TestSubmitAssistedPick (8)
+│                                # TestAuditLog (3), TestAssistedBroadcastEvents (2)
+│                                # TestFullAssistedDraftFlow (1)
 ├── pytest.ini             # pytest config — asyncio strict mode
 ├── requirements.txt       # Production dependencies (pinned to minor version)
 └── requirements-dev.txt   # Dev/CI dependencies (pytest, ruff, mypy)

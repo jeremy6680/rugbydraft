@@ -55,6 +55,10 @@ class PickRecordResponse(BaseModel):
         default=0.0,
         description="asyncio loop time when the pick was recorded.",
     )
+    entered_by_commissioner: bool = Field(
+        default=False,
+        description="True if this pick was entered by the commissioner in assisted mode.",
+    )
 
     model_config = {"from_attributes": True}
 

@@ -93,6 +93,7 @@ def make_engine(
         manager_ids=managers,
         available_players=players,
         competition_type=CompetitionType.INTERNATIONAL,
+        commissioner_id="test-commissioner",
         pick_duration=pick_duration,
     )
 
@@ -459,6 +460,7 @@ class TestBroadcastEvents:
             manager_ids=managers,
             available_players=players,
             competition_type=CompetitionType.INTERNATIONAL,
+            commissioner_id="test-commissioner",
             pick_duration=pick_duration,
             broadcaster=broadcaster,
         )

@@ -769,3 +769,81 @@ the test is validating.
 - Total test count: 122 → 126.
 
 ---
+
+## D-026 — Assisted Draft: commissioner_id in DraftState, audit log in memory
+
+**Date:** 2026-03-20
+**Status:** Accepted
+
+**Context:** The Assisted Draft mode (CDC v3.1, section 7.5) requires (1) authorising
+only the league commissioner to activate the mode and submit picks, and (2) an audit
+log of all commissioner-entered picks, visible to all managers.
+
+Two architectural questions arose:
+
+**Question 1 — Where does assisted_mode state live?**
+
+- Option A: Only in the DB (`drafts.is_assisted_mode`) — survives FastAPI restart,
+  but requires a DB query on every pick to check the flag.
+- Option B: Only in `DraftState` (in memory) — consistent with all other draft state,
+  lost on FastAPI restart.
+- Option C: Both — `DraftState.assisted_mode` (runtime authority) + persisted to
+  `drafts.is_assisted_mode` on enable (for restart recovery).
+
+**Decision:** Option B for V1. The `drafts.is_assisted_mode` column already exists
+in the schema (001_initial_schema.sql) and will be used for restart recovery in a
+future phase. In V1, restart mid-assisted-draft is an edge case without a documented
+recovery procedure (tracked in NEXT_STEPS.md).
+
+**Rationale:** Consistent with D-001 — FastAPI is the authority of state. All runtime
+draft state lives in `DraftState`. Adding a DB sync on every `enable_assisted_mode()`
+call would complicate the engine without providing value until restart recovery is
+implemented.
+
+**Question 2 — Where does the audit log live?**
+
+- Option A: DB only (`draft_picks.entered_by_commissioner`) — survives restart,
+  requires a DB query to serve GET /assisted/log.
+- Option B: In memory (`DraftState.assisted_audit_log`) + DB column as persistence
+  — GET /assisted/log served from memory during active draft, from DB after completion.
+
+**Decision:** Option B for V1. The `draft_picks.entered_by_commissioner` column
+already exists in the schema. In V1, the in-memory audit log is authoritative during
+an active draft. Persistence to DB is implemented when the pick persistence layer
+(Phase 3) is built.
+
+**commissioner_id in DraftState:** Added as a required field (with default
+`"commissioner-default"` for tests). The commissioner is set at engine creation and
+never changes — it does not need to be updatable.
+
+**New files:**
+
+- `backend/draft/assisted.py` — pure logic: typed errors, `AssistedPickAuditEntry`,
+  pure validation functions (`validate_commissioner`, `validate_assisted_mode_active`, etc.)
+- `backend/app/routers/draft_assisted.py` — 3 endpoints:
+  POST /assisted/enable, POST /assisted/pick, GET /assisted/log
+- `backend/tests/draft/test_assisted.py` — 19 tests across 5 classes
+
+**Changes to existing files:**
+
+- `draft/engine.py` — `DraftState` gains `assisted_mode`, `assisted_audit_log`,
+  `commissioner_id`. `DraftEngine` gains `enable_assisted_mode()`,
+  `submit_assisted_pick()`, `get_assisted_audit_log()`. `_record_pick()` gains
+  `entered_by_commissioner` flag. `_start_current_turn()` is assisted-mode aware
+  (no timer started in assisted mode).
+- `draft/events.py` — `DraftPickMadeEvent` gains `entered_by_commissioner` field.
+  New event: `DraftAssistedModeEnabledEvent`.
+- `app/schemas/draft.py` — `PickRecordResponse` gains `entered_by_commissioner` field.
+- `app/main.py` — `draft_assisted.router` mounted.
+- `tests/draft/test_engine.py` and `tests/test_reconnection.py` — `make_engine()`
+  helpers updated with `commissioner_id="test-commissioner"`.
+
+**Consequences:**
+
+- `DraftEngine.__init__()` gains `commissioner_id: str = "commissioner-default"`.
+  Default value preserves backward compatibility with existing tests.
+- HTTP 403 for non-commissioner actions (not 401 — the user is authenticated,
+  just not authorised for this specific resource).
+- HTTP 409 Conflict for mode guard errors (already active / not active) — more
+  precise than 422 which is reserved for data validation failures.
+- Total test count: 126 → 145 (19 new tests in test_assisted.py).

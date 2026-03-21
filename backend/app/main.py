@@ -21,7 +21,7 @@ from slowapi.util import get_remote_address
 
 from app.config import settings
 from app.middleware.auth import AuthMiddleware
-from app.routers import draft, health
+from app.routers import draft, draft_assisted, health
 from draft.registry import DraftRegistry
 
 # ── Rate limiter setup ────────────────────────────────────────────────────────
@@ -98,5 +98,6 @@ app.add_middleware(AuthMiddleware)
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(health.router)
 app.include_router(draft.router)
+app.include_router(draft_assisted.router)
 # Phase 3: app.include_router(players.router, prefix="/players")
 # Phase 3: app.include_router(leagues.router, prefix="/leagues")

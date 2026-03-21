@@ -1,6 +1,6 @@
 # NEXT_STEPS.md — RugbyDraft
 
-> Current status: Phase 2 in progress — Reconnection protocol complete. Draft Assistée next.
+> Current status: Phase 2 in progress — Draft Assistée complete. Ghost team next.
 > Last updated: 2026-03-20
 
 ---
@@ -132,10 +132,10 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ### Draft Assistée (fallback mode)
 
-- [ ] Commissioner UI: "Switch to Assisted Draft" button
-- [ ] Commissioner enters picks one by one, no timer
-- [ ] Audit log: each pick stamped with timestamp + "entered by commissioner"
-- [ ] Log visible to all managers
+- [x] Commissioner UI: "Switch to Assisted Draft" button
+- [x] Commissioner enters picks one by one, no timer
+- [x] Audit log: each pick stamped with timestamp + "entered by commissioner"
+- [x] Log visible to all managers
 
 ### Ghost team
 
@@ -150,7 +150,7 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 - [x] Timer timeout → autodraft activation
 - [x] Client reconnection during pick
 - [x] Client reconnection after pick (timer expired)
-- [ ] Draft Assistée: picks logged correctly
+- [x] Draft Assistée: picks logged correctly
 - [ ] Roster constraint validation (coverage minimums)
 
 ---

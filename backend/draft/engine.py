@@ -8,6 +8,7 @@ This is the central orchestrator of Phase 2. It wires together:
     - validate_pick.py — pick validation
     - autodraft.py    — automatic pick selection
     - broadcaster.py  — Supabase Realtime broadcast (D-001)
+    - assisted.py     — Assisted Draft fallback mode (CDC 7.5)
 
 Architecture principle (D-001):
     FastAPI is the authority of state. Supabase Realtime is a broadcast
@@ -25,6 +26,13 @@ Reconnection protocol (CDC v3.1, section 7.4, D-001):
     - If the manager reconnects during their turn with time remaining,
       they can take control (autodraft deactivated).
     - If the timer already expired, the autodraft pick is final.
+
+Assisted Draft (CDC v3.1, section 7.5):
+    - Commissioner activates assisted mode via enable_assisted_mode().
+    - Commissioner submits picks via submit_assisted_pick().
+    - No timer in assisted mode — picks are entered at the commissioner's pace.
+    - Every assisted pick is appended to the audit log (AssistedPickAuditEntry).
+    - The resulting roster is identical to a standard synchronous draft.
 
 Broadcast (Supabase Realtime):
     Every state-changing method calls _broadcast(event) with a typed
@@ -44,9 +52,19 @@ from typing import Optional
 
 from app.models.league import CompetitionType
 from app.models.player import PlayerSummary
+from draft.assisted import (
+    AssistedDraftError,
+    AssistedPickAuditEntry,
+    AssistedModeAlreadyActiveError,
+    build_audit_entry,
+    validate_assisted_mode_active,
+    validate_assisted_mode_not_already_active,
+    validate_commissioner,
+)
 from draft.autodraft import AutodraftError, AutodraftResult, select_autodraft_pick
-from draft.broadcaster import BroadcasterProtocol, MockBroadcaster  
-from draft.events import ( 
+from draft.broadcaster import BroadcasterProtocol, MockBroadcaster
+from draft.events import (
+    DraftAssistedModeEnabledEvent,
     DraftCompletedEvent,
     DraftEvent,
     DraftManagerConnectedEvent,
@@ -60,6 +78,8 @@ from draft.timer import DEFAULT_PICK_DURATION_SECONDS, DraftTimer
 from draft.validate_pick import (
     PickValidationError,
     RosterSnapshot,
+    _validate_player_availability,
+    _validate_roster_constraints,
     validate_pick,
 )
 
@@ -92,6 +112,7 @@ class PickRecord:
         player_id: ID of the drafted player.
         autodrafted: True if the pick was made by autodraft.
         autodraft_source: 'preference_list', 'default_value', or None.
+        entered_by_commissioner: True if submitted via assisted mode.
         timestamp: asyncio loop time when the pick was recorded.
     """
 
@@ -100,6 +121,7 @@ class PickRecord:
     player_id: str
     autodrafted: bool = False
     autodraft_source: Optional[str] = None
+    entered_by_commissioner: bool = False  # NEW: assisted mode flag
     timestamp: float = 0.0
 
 
@@ -116,10 +138,14 @@ class DraftStateSnapshot:
     current_pick_number: int
     total_picks: int
     current_manager_id: Optional[str]    # None if draft completed
-    time_remaining: float                 # seconds, 0.0 if completed
+    time_remaining: float                 # seconds, 0.0 if completed or assisted mode
     picks: list[PickRecord]
     autodraft_managers: list[str]
     connected_managers: list[str]
+    assisted_mode: bool = False                              # NEW: assisted mode flag
+    assisted_audit_log: list[AssistedPickAuditEntry] = field(  # NEW: full audit log
+        default_factory=list
+    )
 
 
 @dataclass
@@ -134,6 +160,7 @@ class DraftState:
     draft_order: list[str]           # flat snake order list
     competition_type: CompetitionType
     pick_duration: float             # seconds per pick
+    commissioner_id: str = "commissioner-default",
     status: DraftStatus = DraftStatus.PENDING
     current_pick_number: int = 1
     picks: list[PickRecord] = field(default_factory=list)
@@ -149,6 +176,10 @@ class DraftState:
 
     # Managers currently connected (WebSocket / Realtime subscription active)
     connected_managers: set[str] = field(default_factory=set)
+
+    # NEW: Assisted Draft mode (CDC v3.1, section 7.5)
+    assisted_mode: bool = False
+    assisted_audit_log: list[AssistedPickAuditEntry] = field(default_factory=list)
 
     @property
     def total_picks(self) -> int:
@@ -189,6 +220,7 @@ class DraftEngine:
             manager_ids=["M1", "M2", "M3"],
             available_players=players,
             competition_type=CompetitionType.INTERNATIONAL,
+            commissioner_id="M1",
             pick_duration=120.0,
             broadcaster=SupabaseBroadcaster(client, "abc123"),
         )
@@ -203,9 +235,10 @@ class DraftEngine:
         manager_ids: list[str],
         available_players: list[PlayerSummary],
         competition_type: CompetitionType,
+        commissioner_id: str,
         pick_duration: float = DEFAULT_PICK_DURATION_SECONDS,
         preference_lists: Optional[dict[str, list[str]]] = None,
-        broadcaster: Optional[BroadcasterProtocol] = None,  
+        broadcaster: Optional[BroadcasterProtocol] = None,
     ) -> None:
         """Initialise the DraftEngine. Does NOT start the draft.
 
@@ -216,6 +249,8 @@ class DraftEngine:
             manager_ids: All manager IDs. Will be shuffled for the draw.
             available_players: Full player pool, pre-sorted by value_score desc.
             competition_type: International or club (determines constraints).
+            commissioner_id: User ID of the league commissioner. Required to
+                             authorise assisted mode actions.
             pick_duration: Seconds per pick. Default: 120s (CDC v3.1).
             preference_lists: Optional dict of manager_id → ordered player IDs.
             broadcaster: Broadcast implementation. Defaults to MockBroadcaster
@@ -232,6 +267,7 @@ class DraftEngine:
             managers=shuffled,
             draft_order=draft_order,
             competition_type=competition_type,
+            commissioner_id=commissioner_id,
             pick_duration=pick_duration,
             rosters={
                 m: RosterSnapshot(
@@ -250,24 +286,25 @@ class DraftEngine:
         # Preference lists — default to empty list per manager
         self._preference_lists: dict[str, list[str]] = preference_lists or {}
 
-        # Current active timer — one per pick slot
+        # Current active timer — one per pick slot (None in assisted mode)
         self._current_timer: Optional[DraftTimer] = None
 
         # Concurrency lock — prevents simultaneous pick submissions
         self._lock = asyncio.Lock()
 
-        # Broadcaster — defaults to MockBroadcaster (safe no-op) 
+        # Broadcaster — defaults to MockBroadcaster (safe no-op)
         self._broadcaster: BroadcasterProtocol = broadcaster or MockBroadcaster()
 
         logger.info(
-            "DraftEngine created: league=%s, managers=%s, total_picks=%d",
+            "DraftEngine created: league=%s, managers=%s, total_picks=%d, commissioner=%s",
             league_id,
             shuffled,
             self._state.total_picks,
+            commissioner_id,
         )
 
     # ------------------------------------------------------------------
-    # Public interface
+    # Public interface — standard draft
     # ------------------------------------------------------------------
 
     async def start_draft(
@@ -309,7 +346,6 @@ class DraftEngine:
                 self._state.autodraft_managers,
             )
 
-            # ← CHANGED: broadcast typed DraftStartedEvent
             await self._broadcast(DraftStartedEvent(
                 league_id=self._state.league_id,
                 managers=list(self._state.managers),
@@ -375,7 +411,6 @@ class DraftEngine:
                 autodrafted=False,
             )
 
-            # ← CHANGED: broadcast typed DraftPickMadeEvent
             await self._broadcast(DraftPickMadeEvent(
                 league_id=self._state.league_id,
                 pick_number=record.pick_number,
@@ -403,7 +438,7 @@ class DraftEngine:
         async with self._lock:
             self._state.connected_managers.add(manager_id)
 
-            autodraft_deactivated = False  # track for event payload
+            autodraft_deactivated = False
 
             # Give control back if reconnecting during own turn before pick is made.
             is_own_turn = (
@@ -418,19 +453,20 @@ class DraftEngine:
 
             if is_own_turn and pick_not_yet_made:
                 self._state.autodraft_managers.discard(manager_id)
-                autodraft_deactivated = True  
+                autodraft_deactivated = True
                 logger.info(
                     "Manager '%s' reconnected during their turn — autodraft deactivated",
                     manager_id,
                 )
-                # Start the timer now that manager is taking manual control
-                self._current_timer = DraftTimer(
-                    duration=self._state.pick_duration,
-                    on_expire=self._on_timer_expired,
-                )
-                self._current_timer.start()
+                # Start the timer now that manager is taking manual control.
+                # Note: in assisted mode, no timer is started — commissioner drives pace.
+                if not self._state.assisted_mode:
+                    self._current_timer = DraftTimer(
+                        duration=self._state.pick_duration,
+                        on_expire=self._on_timer_expired,
+                    )
+                    self._current_timer.start()
 
-            # ← CHANGED: broadcast typed DraftManagerConnectedEvent
             await self._broadcast(DraftManagerConnectedEvent(
                 league_id=self._state.league_id,
                 manager_id=manager_id,
@@ -452,7 +488,6 @@ class DraftEngine:
             self._state.connected_managers.discard(manager_id)
             logger.info("Manager '%s' disconnected", manager_id)
 
-            # ← CHANGED: broadcast typed DraftManagerDisconnectedEvent
             await self._broadcast(DraftManagerDisconnectedEvent(
                 league_id=self._state.league_id,
                 manager_id=manager_id,
@@ -476,6 +511,166 @@ class DraftEngine:
             ):
                 await self._run_autodraft_for_current_pick()
 
+    # ------------------------------------------------------------------
+    # Public interface — Assisted Draft (CDC v3.1, section 7.5)
+    # ------------------------------------------------------------------
+
+    async def enable_assisted_mode(self, commissioner_id: str) -> None:
+        """Switch the draft to Assisted Draft mode.
+
+        In assisted mode:
+            - The server-side timer is cancelled and will not restart.
+            - The commissioner submits all picks via submit_assisted_pick().
+            - All picks are logged with entered_by_commissioner=True.
+
+        Can only be called by the league commissioner, and only while
+        the draft is IN_PROGRESS or PENDING.
+
+        Args:
+            commissioner_id: User ID of the person requesting the switch.
+
+        Raises:
+            NotCommissionerError: If caller is not the league commissioner.
+            AssistedModeAlreadyActiveError: If already in assisted mode.
+            RuntimeError: If the draft is COMPLETED.
+        """
+        async with self._lock:
+            if self._state.status == DraftStatus.COMPLETED:
+                raise RuntimeError("Cannot enable assisted mode on a completed draft.")
+
+            # Authorisation: only the commissioner can flip this switch
+            validate_commissioner(commissioner_id, self._state.commissioner_id)
+
+            # Idempotency guard
+            validate_assisted_mode_not_already_active(self._state.assisted_mode)
+
+            # Cancel the running timer — no timer in assisted mode
+            if self._current_timer is not None:
+                self._current_timer.cancel()
+                self._current_timer = None
+
+            self._state.assisted_mode = True
+
+            logger.info(
+                "Assisted mode enabled: league=%s, by commissioner=%s",
+                self._state.league_id,
+                commissioner_id,
+            )
+
+            await self._broadcast(DraftAssistedModeEnabledEvent(
+                league_id=self._state.league_id,
+                commissioner_id=commissioner_id,
+                current_pick_number=self._state.current_pick_number,
+            ))
+
+    async def submit_assisted_pick(
+        self,
+        commissioner_id: str,
+        manager_id: str,
+        player_id: str,
+    ) -> PickRecord:
+        """Submit a pick on behalf of a manager in Assisted Draft mode.
+
+        The commissioner specifies which manager this pick belongs to.
+        The pick must follow the snake order — manager_id must match the
+        current pick slot (same turn validation as normal picks).
+
+        Player availability and roster constraints are still enforced:
+        the resulting roster must be identical to a standard draft.
+
+        No timer is involved — the commissioner sets the pace.
+
+        Args:
+            commissioner_id: User ID of the commissioner entering the pick.
+            manager_id: Manager whose turn it is (must match draft order).
+            player_id: Player being drafted.
+
+        Returns:
+            The recorded PickRecord (with entered_by_commissioner=True).
+
+        Raises:
+            NotCommissionerError: If caller is not the league commissioner.
+            AssistedModeNotActiveError: If assisted mode is not active.
+            PickValidationError: If turn, player, or roster validation fails.
+            RuntimeError: If the draft is not IN_PROGRESS.
+        """
+        async with self._lock:
+            if self._state.status != DraftStatus.IN_PROGRESS:
+                raise RuntimeError(
+                    f"Cannot submit assisted pick — draft status is '{self._state.status}'"
+                )
+
+            # Authorisation: only the commissioner can submit assisted picks
+            validate_commissioner(commissioner_id, self._state.commissioner_id)
+
+            # Mode guard: assisted mode must be active
+            validate_assisted_mode_active(self._state.assisted_mode)
+
+            # Find the player — raises PlayerAlreadyDraftedError if not found
+            player = self._get_available_player(player_id)
+            roster = self._state.rosters[manager_id]
+
+            # Full pick validation: turn + player + roster constraints.
+            # We reuse validate_pick() entirely — the turn check ensures the
+            # commissioner submits picks in the correct snake order.
+            validate_pick(
+                manager_id=manager_id,
+                player_id=player_id,
+                current_pick_number=self._state.current_pick_number,
+                draft_order=self._state.draft_order,
+                drafted_player_ids=self._state.drafted_player_ids,
+                player=player,
+                roster=roster,
+                competition_type=self._state.competition_type,
+            )
+
+            # Record the pick with the commissioner flag
+            record = self._record_pick(
+                player_id=player_id,
+                player=player,
+                autodrafted=False,
+                entered_by_commissioner=True,
+            )
+
+            # Append to the audit log
+            audit_entry = build_audit_entry(
+                pick_number=record.pick_number,
+                manager_id=manager_id,
+                player_id=player_id,
+                commissioner_id=commissioner_id,
+            )
+            self._state.assisted_audit_log.append(audit_entry)
+
+            logger.info(
+                "Assisted pick %d recorded: manager='%s' player='%s' by commissioner='%s'",
+                record.pick_number,
+                manager_id,
+                player_id,
+                commissioner_id,
+            )
+
+            await self._broadcast(DraftPickMadeEvent(
+                league_id=self._state.league_id,
+                pick_number=record.pick_number,
+                manager_id=record.manager_id,
+                player_id=record.player_id,
+                autodrafted=False,
+                entered_by_commissioner=True,
+            ))
+            await self._advance_to_next_turn()
+
+            return record
+
+    def get_assisted_audit_log(self) -> list[AssistedPickAuditEntry]:
+        """Return the full assisted draft audit log.
+
+        Safe to call without the lock (read-only, returns a copy).
+
+        Returns:
+            List of AssistedPickAuditEntry, ordered by pick number.
+        """
+        return list(self._state.assisted_audit_log)
+
     def get_state_snapshot(self) -> DraftStateSnapshot:
         """Return an immutable snapshot of the current draft state.
 
@@ -496,6 +691,8 @@ class DraftEngine:
             picks=list(self._state.picks),
             autodraft_managers=list(self._state.autodraft_managers),
             connected_managers=list(self._state.connected_managers),
+            assisted_mode=self._state.assisted_mode,
+            assisted_audit_log=list(self._state.assisted_audit_log),
         )
 
     # ------------------------------------------------------------------
@@ -505,8 +702,8 @@ class DraftEngine:
     async def _start_current_turn(self) -> None:
         """Start the timer (or autodraft) for the current pick slot.
 
-        Broadcasts DraftTurnChangedEvent so clients can start their
-        local countdown (clock synchronisation pattern — no tick broadcast).
+        In assisted mode, no timer is started — the commissioner drives pace.
+        Broadcasts DraftTurnChangedEvent so clients can update their UI.
         """
         if self._state.is_completed:
             await self._complete_draft()
@@ -515,7 +712,6 @@ class DraftEngine:
         current_manager = self._state.current_manager_id
         assert current_manager is not None
 
-        # broadcast turn change before starting timer/autodraft
         await self._broadcast(DraftTurnChangedEvent(
             league_id=self._state.league_id,
             current_pick_number=self._state.current_pick_number,
@@ -523,6 +719,15 @@ class DraftEngine:
             pick_duration=self._state.pick_duration,
             turn_started_at=time.time(),
         ))
+
+        # In assisted mode: no timer, no autodraft — commissioner enters picks
+        if self._state.assisted_mode:
+            logger.debug(
+                "Pick %d: assisted mode — waiting for commissioner input (manager '%s')",
+                self._state.current_pick_number,
+                current_manager,
+            )
+            return
 
         if current_manager in self._state.autodraft_managers:
             logger.debug(
@@ -532,7 +737,6 @@ class DraftEngine:
             )
             asyncio.create_task(self._run_autodraft_for_current_pick())
         else:
-            # Start the countdown timer for this pick slot
             self._current_timer = DraftTimer(
                 duration=self._state.pick_duration,
                 on_expire=self._on_timer_expired,
@@ -549,6 +753,10 @@ class DraftEngine:
         """Callback fired by DraftTimer when the pick time runs out."""
         async with self._lock:
             if self._state.status != DraftStatus.IN_PROGRESS:
+                return
+
+            # In assisted mode the timer should never be running — guard anyway
+            if self._state.assisted_mode:
                 return
 
             current_manager = self._state.current_manager_id
@@ -597,7 +805,6 @@ class DraftEngine:
             autodraft_source=result.source,
         )
 
-        # ← CHANGED: broadcast typed DraftPickMadeEvent (autodrafted=True)
         await self._broadcast(DraftPickMadeEvent(
             league_id=self._state.league_id,
             pick_number=record.pick_number,
@@ -622,11 +829,11 @@ class DraftEngine:
         self._state.status = DraftStatus.COMPLETED
         self._current_timer = None
         logger.info(
-            "Draft completed: league=%s, total_picks=%d",
+            "Draft completed: league=%s, total_picks=%d, assisted_mode=%s",
             self._state.league_id,
             len(self._state.picks),
+            self._state.assisted_mode,
         )
-        # ← CHANGED: broadcast typed DraftCompletedEvent
         await self._broadcast(DraftCompletedEvent(
             league_id=self._state.league_id,
             total_picks=len(self._state.picks),
@@ -642,6 +849,7 @@ class DraftEngine:
         player: PlayerSummary,
         autodrafted: bool,
         autodraft_source: Optional[str] = None,
+        entered_by_commissioner: bool = False,  # NEW
     ) -> PickRecord:
         """Record a pick and update all derived state."""
         current_manager = self._state.current_manager_id
@@ -654,6 +862,7 @@ class DraftEngine:
             player_id=player_id,
             autodrafted=autodrafted,
             autodraft_source=autodraft_source,
+            entered_by_commissioner=entered_by_commissioner,
             timestamp=loop.time(),
         )
         self._state.picks.append(record)
@@ -678,11 +887,12 @@ class DraftEngine:
         )
 
         logger.info(
-            "Pick %d recorded: manager='%s' player='%s' autodrafted=%s",
+            "Pick %d recorded: manager='%s' player='%s' autodrafted=%s commissioner=%s",
             record.pick_number,
             current_manager,
             player_id,
             autodrafted,
+            entered_by_commissioner,
         )
 
         return record
@@ -705,9 +915,8 @@ class DraftEngine:
 
         A broadcast failure must NEVER crash the draft — the client
         can always call GET /draft/{id}/state for a full snapshot.
-        Error handling lives in SupabaseBroadcaster.broadcast().
 
         Args:
             event: A typed DraftEvent subclass to send.
         """
-        await self._broadcaster.broadcast(event)  # ← CHANGED: was `pass`
+        await self._broadcaster.broadcast(event)

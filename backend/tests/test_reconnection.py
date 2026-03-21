@@ -86,6 +86,7 @@ def make_engine(
         manager_ids=manager_ids,
         available_players=make_player_pool(60),
         competition_type=CompetitionType.INTERNATIONAL,
+        commissioner_id="test-commissioner",
         pick_duration=pick_duration,
         preference_lists=preference_lists or {},
         broadcaster=broadcaster,

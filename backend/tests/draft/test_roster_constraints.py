@@ -86,44 +86,44 @@ def _build_valid_roster() -> list[PlayerSummary]:
     """
     # ── Starters (15) ────────────────────────────────────────────────────────
     starters: list[PlayerSummary] = [
-        _build_player([PositionType.PROP]),        # 1
-        _build_player([PositionType.PROP]),        # 2
-        _build_player([PositionType.HOOKER]),      # 3
-        _build_player([PositionType.LOCK]),        # 4
-        _build_player([PositionType.LOCK]),        # 5
-        _build_player([PositionType.FLANKER]),     # 6
-        _build_player([PositionType.FLANKER]),     # 7
-        _build_player([PositionType.NUMBER_8]),    # 8
+        _build_player([PositionType.PROP]),  # 1
+        _build_player([PositionType.PROP]),  # 2
+        _build_player([PositionType.HOOKER]),  # 3
+        _build_player([PositionType.LOCK]),  # 4
+        _build_player([PositionType.LOCK]),  # 5
+        _build_player([PositionType.FLANKER]),  # 6
+        _build_player([PositionType.FLANKER]),  # 7
+        _build_player([PositionType.NUMBER_8]),  # 8
         _build_player([PositionType.SCRUM_HALF]),  # 9
-        _build_player([PositionType.FLY_HALF]),    # 10
-        _build_player([PositionType.CENTRE]),      # 11
-        _build_player([PositionType.CENTRE]),      # 12
-        _build_player([PositionType.WING]),        # 13
-        _build_player([PositionType.WING]),        # 14
-        _build_player([PositionType.FULLBACK]),    # 15
+        _build_player([PositionType.FLY_HALF]),  # 10
+        _build_player([PositionType.CENTRE]),  # 11
+        _build_player([PositionType.CENTRE]),  # 12
+        _build_player([PositionType.WING]),  # 13
+        _build_player([PositionType.WING]),  # 14
+        _build_player([PositionType.FULLBACK]),  # 15
     ]
 
     # ── Bench — mandatory coverage (10 slots) ────────────────────────────────
     bench_mandatory: list[PlayerSummary] = [
-        _build_player([PositionType.PROP]),        # 16 — prop ×1 (of 2 required)
-        _build_player([PositionType.PROP]),        # 17 — prop ×2 ✓
-        _build_player([PositionType.HOOKER]),      # 18 — hooker ✓
-        _build_player([PositionType.LOCK]),        # 19 — lock ✓
-        _build_player([PositionType.FLANKER]),     # 20 — back_row ✓
+        _build_player([PositionType.PROP]),  # 16 — prop ×1 (of 2 required)
+        _build_player([PositionType.PROP]),  # 17 — prop ×2 ✓
+        _build_player([PositionType.HOOKER]),  # 18 — hooker ✓
+        _build_player([PositionType.LOCK]),  # 19 — lock ✓
+        _build_player([PositionType.FLANKER]),  # 20 — back_row ✓
         _build_player([PositionType.SCRUM_HALF]),  # 21 — scrum_half ✓
-        _build_player([PositionType.FLY_HALF]),    # 22 — fly_half ✓
-        _build_player([PositionType.CENTRE]),      # 23 — centre ✓
-        _build_player([PositionType.WING]),        # 24 — wing ✓
-        _build_player([PositionType.FULLBACK]),    # 25 — fullback ✓
+        _build_player([PositionType.FLY_HALF]),  # 22 — fly_half ✓
+        _build_player([PositionType.CENTRE]),  # 23 — centre ✓
+        _build_player([PositionType.WING]),  # 24 — wing ✓
+        _build_player([PositionType.FULLBACK]),  # 25 — fullback ✓
     ]
 
     # ── Bench — libre slots (5 slots, no constraint) ─────────────────────────
     bench_libre: list[PlayerSummary] = [
-        _build_player([PositionType.PROP]),    # 26
-        _build_player([PositionType.LOCK]),    # 27
-        _build_player([PositionType.LOCK]),    # 28
-        _build_player([PositionType.FLANKER]), # 29
-        _build_player([PositionType.FLANKER]), # 30
+        _build_player([PositionType.PROP]),  # 26
+        _build_player([PositionType.LOCK]),  # 27
+        _build_player([PositionType.LOCK]),  # 28
+        _build_player([PositionType.FLANKER]),  # 29
+        _build_player([PositionType.FLANKER]),  # 30
     ]
 
     roster = starters + bench_mandatory + bench_libre
@@ -164,16 +164,16 @@ class TestValidRosters:
         starters = [_build_player([PositionType.PROP])] * STARTER_COUNT
 
         bench_exact: list[PlayerSummary] = [
-            _build_player([PositionType.PROP]),        # prop ×1 of 2
-            _build_player([PositionType.PROP]),        # prop ×2 ✓
-            _build_player([PositionType.HOOKER]),      # hooker ✓
-            _build_player([PositionType.LOCK]),        # lock ✓
-            _build_player([PositionType.FLANKER]),     # back_row ✓
+            _build_player([PositionType.PROP]),  # prop ×1 of 2
+            _build_player([PositionType.PROP]),  # prop ×2 ✓
+            _build_player([PositionType.HOOKER]),  # hooker ✓
+            _build_player([PositionType.LOCK]),  # lock ✓
+            _build_player([PositionType.FLANKER]),  # back_row ✓
             _build_player([PositionType.SCRUM_HALF]),  # scrum_half ✓
-            _build_player([PositionType.FLY_HALF]),    # fly_half ✓
-            _build_player([PositionType.CENTRE]),      # centre ✓
-            _build_player([PositionType.WING]),        # wing ✓
-            _build_player([PositionType.FULLBACK]),    # fullback ✓
+            _build_player([PositionType.FLY_HALF]),  # fly_half ✓
+            _build_player([PositionType.CENTRE]),  # centre ✓
+            _build_player([PositionType.WING]),  # wing ✓
+            _build_player([PositionType.FULLBACK]),  # fullback ✓
             # 5 libre slots — any position, no constraint
             _build_player([PositionType.WING]),
             _build_player([PositionType.WING]),
@@ -197,7 +197,7 @@ class TestValidRosters:
             _build_player([PositionType.PROP]),
             _build_player([PositionType.HOOKER]),
             _build_player([PositionType.LOCK]),
-            _build_player([PositionType.NUMBER_8]),    # back_row via number_8
+            _build_player([PositionType.NUMBER_8]),  # back_row via number_8
             _build_player([PositionType.SCRUM_HALF]),
             _build_player([PositionType.FLY_HALF]),
             _build_player([PositionType.CENTRE]),
@@ -224,9 +224,7 @@ class TestValidRosters:
 class TestMissingPositionCoverage:
     """Verify that missing bench positions raise RosterCoverageError correctly."""
 
-    def _bench_with_missing(
-        self, missing_group: str
-    ) -> list[PlayerSummary]:
+    def _bench_with_missing(self, missing_group: str) -> list[PlayerSummary]:
         """Build a 15-player bench with all minimums met EXCEPT one group.
 
         Args:
@@ -237,16 +235,16 @@ class TestMissingPositionCoverage:
         """
         # Full bench that satisfies everything
         full_bench: dict[str, PlayerSummary | list[PlayerSummary]] = {
-            "prop_1":    _build_player([PositionType.PROP]),
-            "prop_2":    _build_player([PositionType.PROP]),
-            "hooker":    _build_player([PositionType.HOOKER]),
-            "lock":      _build_player([PositionType.LOCK]),
-            "back_row":  _build_player([PositionType.FLANKER]),
-            "scrum_half":_build_player([PositionType.SCRUM_HALF]),
-            "fly_half":  _build_player([PositionType.FLY_HALF]),
-            "centre":    _build_player([PositionType.CENTRE]),
-            "wing":      _build_player([PositionType.WING]),
-            "fullback":  _build_player([PositionType.FULLBACK]),
+            "prop_1": _build_player([PositionType.PROP]),
+            "prop_2": _build_player([PositionType.PROP]),
+            "hooker": _build_player([PositionType.HOOKER]),
+            "lock": _build_player([PositionType.LOCK]),
+            "back_row": _build_player([PositionType.FLANKER]),
+            "scrum_half": _build_player([PositionType.SCRUM_HALF]),
+            "fly_half": _build_player([PositionType.FLY_HALF]),
+            "centre": _build_player([PositionType.CENTRE]),
+            "wing": _build_player([PositionType.WING]),
+            "fullback": _build_player([PositionType.FULLBACK]),
         }
 
         # Build bench without the missing group's player(s)
@@ -260,8 +258,16 @@ class TestMissingPositionCoverage:
             bench.append(full_bench["prop_1"])  # type: ignore[arg-type]
             bench.append(full_bench["prop_2"])  # type: ignore[arg-type]
 
-        for key in ("hooker", "lock", "back_row", "scrum_half",
-                    "fly_half", "centre", "wing", "fullback"):
+        for key in (
+            "hooker",
+            "lock",
+            "back_row",
+            "scrum_half",
+            "fly_half",
+            "centre",
+            "wing",
+            "fullback",
+        ):
             if key == missing_group:
                 continue  # omit this position
             bench.append(full_bench[key])  # type: ignore[arg-type]
@@ -298,7 +304,7 @@ class TestMissingPositionCoverage:
 
         error = exc_info.value
         assert "prop" in error.missing
-        assert error.missing["prop"] == 1   # need 1 more prop
+        assert error.missing["prop"] == 1  # need 1 more prop
 
     def test_missing_scrum_half_raises_coverage_error(self) -> None:
         """RosterCoverageError raised when scrum_half is absent from bench."""
@@ -335,9 +341,7 @@ class TestMissingPositionCoverage:
         assert "prop" not in error.missing
 
         # All other 8 groups must be reported as missing (shortfall = 1 each)
-        expected_missing_groups = {
-            g for g in BENCH_COVERAGE_MINIMUMS if g != "prop"
-        }
+        expected_missing_groups = {g for g in BENCH_COVERAGE_MINIMUMS if g != "prop"}
         assert set(error.missing.keys()) == expected_missing_groups
         for group in expected_missing_groups:
             assert error.missing[group] == 1

@@ -210,7 +210,7 @@ class TestGhostTeamsNeeded:
         assert ghost_teams_needed(8) == 0
 
     def test_three_managers_needs_one(self) -> None:
-        """3 managers: below minimum (4) → add 1 to reach 4 (even). """
+        """3 managers: below minimum (4) → add 1 to reach 4 (even)."""
         assert ghost_teams_needed(3) == 1
 
     def test_five_managers_needs_one(self) -> None:

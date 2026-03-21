@@ -53,9 +53,7 @@ MANAGER_2 = "manager-2-uuid"
 ROGUE_USER = "rogue-user-uuid"
 
 # Nationality pool — enough variety to never hit MAX_PER_NATION (8) in tests
-_NATIONALITIES = [
-    "FRA", "ENG", "IRL", "SCO", "WAL", "ITA", "NZL", "AUS", "RSA", "ARG"
-]
+_NATIONALITIES = ["FRA", "ENG", "IRL", "SCO", "WAL", "ITA", "NZL", "AUS", "RSA", "ARG"]
 
 
 # ---------------------------------------------------------------------------
@@ -317,9 +315,7 @@ class TestSubmitAssistedPick:
         await self._start_assisted(engine)
 
         current_manager = engine.get_state_snapshot().current_manager_id
-        wrong_manager = (
-            MANAGER_2 if current_manager == MANAGER_1 else MANAGER_1
-        )
+        wrong_manager = MANAGER_2 if current_manager == MANAGER_1 else MANAGER_1
         player = engine._available_players[0]
 
         with pytest.raises(NotYourTurnError):
@@ -555,7 +551,9 @@ class TestFullAssistedDraftFlow:
                 break
 
             current_manager = snapshot.current_manager_id
-            assert current_manager is not None, "current_manager_id should not be None mid-draft"
+            assert current_manager is not None, (
+                "current_manager_id should not be None mid-draft"
+            )
 
             player = engine._available_players[0]
             await engine.submit_assisted_pick(

@@ -71,6 +71,7 @@ def make_player(
 # Nationality pool — enough variety to never hit MAX_PER_NATION (8) in tests
 _NATIONALITIES = ["FRA", "ENG", "IRE", "SCO", "WAL", "ITA", "NZL", "AUS", "RSA", "ARG"]
 
+
 def make_player_pool(
     size: int,
     nationalities: list[str] | None = None,
@@ -442,6 +443,7 @@ class TestDraftCompletion:
         assert snapshot.status == DraftStatus.COMPLETED
         assert snapshot.current_manager_id is None
 
+
 # ---------------------------------------------------------------------------
 # Broadcast events
 # ---------------------------------------------------------------------------
@@ -615,9 +617,7 @@ class TestBroadcastEvents:
     @pytest.mark.asyncio
     async def test_completed_draft_emits_completed_event(self) -> None:
         """A fully autodrafted draft must end with a DraftCompletedEvent."""
-        engine, broadcaster = self._make_engine_with_broadcaster(
-            pick_duration=0.001
-        )
+        engine, broadcaster = self._make_engine_with_broadcaster(pick_duration=0.001)
         # No managers connected → full autodraft → completes quickly
         await engine.start_draft(connected_manager_ids=set())
         await asyncio.sleep(1.0)
@@ -716,9 +716,7 @@ class TestGhostTeam:
     @pytest.mark.asyncio
     async def test_ghost_picks_are_autodrafted(self) -> None:
         """All picks made by a ghost team must have autodrafted=True."""
-        engine, ghost_ids = self._make_engine_with_ghost(
-            ["M1"], pick_duration=0.001
-        )
+        engine, ghost_ids = self._make_engine_with_ghost(["M1"], pick_duration=0.001)
         ghost_id = ghost_ids[0]
 
         # No human connected → full autodraft → draft completes quickly
@@ -735,9 +733,7 @@ class TestGhostTeam:
     @pytest.mark.asyncio
     async def test_ghost_picks_have_default_value_source(self) -> None:
         """Ghost team has no preference list — source must be 'default_value'."""
-        engine, ghost_ids = self._make_engine_with_ghost(
-            ["M1"], pick_duration=0.001
-        )
+        engine, ghost_ids = self._make_engine_with_ghost(["M1"], pick_duration=0.001)
         ghost_id = ghost_ids[0]
 
         await engine.start_draft(connected_manager_ids=set())
@@ -752,7 +748,8 @@ class TestGhostTeam:
     async def test_ghost_turn_does_not_start_timer(self) -> None:
         """When a ghost team's turn arrives, no timer must be running."""
         engine, ghost_ids = self._make_engine_with_ghost(
-            ["M1"], pick_duration=10.0  # long timer — would be obvious if started
+            ["M1"],
+            pick_duration=10.0,  # long timer — would be obvious if started
         )
         ghost_id = ghost_ids[0]
 
@@ -805,9 +802,7 @@ class TestGhostTeam:
         A ghost team has no human behind it — it must never be given manual
         control, even if someone calls connect_manager() with its ID.
         """
-        engine, ghost_ids = self._make_engine_with_ghost(
-            ["M1"], pick_duration=10.0
-        )
+        engine, ghost_ids = self._make_engine_with_ghost(["M1"], pick_duration=10.0)
         ghost_id = ghost_ids[0]
 
         await engine.start_draft(connected_manager_ids={"M1"})
@@ -816,9 +811,7 @@ class TestGhostTeam:
         snapshot = engine.get_state_snapshot()
         if snapshot.current_manager_id != ghost_id:
             player = engine._available_players[0]
-            await engine.submit_pick(
-                manager_id="M1", player_id=str(player.id)
-            )
+            await engine.submit_pick(manager_id="M1", player_id=str(player.id))
 
         # Manually force ghost into autodraft_managers to simulate
         # the state that connect_manager() should NOT clear
@@ -843,9 +836,7 @@ class TestGhostTeam:
     @pytest.mark.asyncio
     async def test_draft_with_ghost_completes_with_correct_pick_count(self) -> None:
         """A 2-manager draft (1 human + 1 ghost) must complete with 60 picks."""
-        engine, _ = self._make_engine_with_ghost(
-            ["M1"], pick_duration=0.001
-        )
+        engine, _ = self._make_engine_with_ghost(["M1"], pick_duration=0.001)
         await engine.start_draft(connected_manager_ids=set())
         await asyncio.sleep(1.0)
 

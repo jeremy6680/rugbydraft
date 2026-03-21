@@ -38,6 +38,7 @@ def make_player(
 ) -> PlayerSummary:
     """Create a PlayerSummary for testing."""
     from uuid import UUID
+
     uid = UUID(player_id) if player_id else uuid4()
     return PlayerSummary(
         id=uid,

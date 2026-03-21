@@ -29,7 +29,11 @@ from dataclasses import dataclass
 
 from app.models.league import CompetitionType
 from app.models.player import PlayerSummary
-from draft.validate_pick import PickValidationError, RosterSnapshot, _validate_roster_constraints
+from draft.validate_pick import (
+    PickValidationError,
+    RosterSnapshot,
+    _validate_roster_constraints,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,9 +53,7 @@ class AutodraftError(Exception):
     """
 
     def __init__(self, manager_id: str, reason: str) -> None:
-        super().__init__(
-            f"Autodraft failed for manager '{manager_id}': {reason}"
-        )
+        super().__init__(f"Autodraft failed for manager '{manager_id}': {reason}")
         self.manager_id = manager_id
         self.reason = reason
 
@@ -114,9 +116,7 @@ def select_autodraft_pick(
         AutodraftError: If no valid player can be found (data integrity issue).
     """
     # Build a lookup map for O(1) access by player ID
-    player_map: dict[str, PlayerSummary] = {
-        str(p.id): p for p in available_players
-    }
+    player_map: dict[str, PlayerSummary] = {str(p.id): p for p in available_players}
 
     # ── Priority 1: preference list ───────────────────────────────────────────
     result = _select_from_preference_list(

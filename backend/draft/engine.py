@@ -93,9 +93,9 @@ DRAFT_NUM_ROUNDS: int = 30
 class DraftStatus(StrEnum):
     """Lifecycle status of a draft session."""
 
-    PENDING = "pending"          # created, not yet started
+    PENDING = "pending"  # created, not yet started
     IN_PROGRESS = "in_progress"  # draft running
-    COMPLETED = "completed"      # all picks made
+    COMPLETED = "completed"  # all picks made
 
 
 @dataclass
@@ -133,17 +133,16 @@ class DraftStateSnapshot:
     status: DraftStatus
     current_pick_number: int
     total_picks: int
-    current_manager_id: Optional[str]    # None if draft completed
-    time_remaining: float                 # seconds, 0.0 if completed or assisted mode
+    current_manager_id: Optional[str]  # None if draft completed
+    time_remaining: float  # seconds, 0.0 if completed or assisted mode
     picks: list[PickRecord]
     autodraft_managers: list[str]
     connected_managers: list[str]
-    assisted_mode: bool = False                              # NEW: assisted mode flag
+    assisted_mode: bool = False  # NEW: assisted mode flag
     assisted_audit_log: list[AssistedPickAuditEntry] = field(  # NEW: full audit log
         default_factory=list
     )
     ghost_manager_ids: list[str] = field(default_factory=list)
-
 
 
 @dataclass
@@ -154,11 +153,11 @@ class DraftState:
     """
 
     league_id: str
-    managers: list[str]              # ordered after random draw
-    draft_order: list[str]           # flat snake order list
+    managers: list[str]  # ordered after random draw
+    draft_order: list[str]  # flat snake order list
     competition_type: CompetitionType
-    pick_duration: float             # seconds per pick
-    commissioner_id: str = "commissioner-default",
+    pick_duration: float  # seconds per pick
+    commissioner_id: str = ("commissioner-default",)
     status: DraftStatus = DraftStatus.PENDING
     current_pick_number: int = 1
     picks: list[PickRecord] = field(default_factory=list)
@@ -345,14 +344,16 @@ class DraftEngine:
                 self._state.autodraft_managers,
             )
 
-            await self._broadcast(DraftStartedEvent(
-                league_id=self._state.league_id,
-                managers=list(self._state.managers),
-                total_picks=self._state.total_picks,
-                current_manager_id=self._state.current_manager_id,
-                pick_duration=self._state.pick_duration,
-                autodraft_managers=list(self._state.autodraft_managers),
-            ))
+            await self._broadcast(
+                DraftStartedEvent(
+                    league_id=self._state.league_id,
+                    managers=list(self._state.managers),
+                    total_picks=self._state.total_picks,
+                    current_manager_id=self._state.current_manager_id,
+                    pick_duration=self._state.pick_duration,
+                    autodraft_managers=list(self._state.autodraft_managers),
+                )
+            )
             await self._start_current_turn()
 
     async def submit_pick(
@@ -410,13 +411,15 @@ class DraftEngine:
                 autodrafted=False,
             )
 
-            await self._broadcast(DraftPickMadeEvent(
-                league_id=self._state.league_id,
-                pick_number=record.pick_number,
-                manager_id=record.manager_id,
-                player_id=record.player_id,
-                autodrafted=False,
-            ))
+            await self._broadcast(
+                DraftPickMadeEvent(
+                    league_id=self._state.league_id,
+                    pick_number=record.pick_number,
+                    manager_id=record.manager_id,
+                    player_id=record.player_id,
+                    autodrafted=False,
+                )
+            )
             await self._advance_to_next_turn()
 
             return record
@@ -469,12 +472,14 @@ class DraftEngine:
                     )
                     self._current_timer.start()
 
-            await self._broadcast(DraftManagerConnectedEvent(
-                league_id=self._state.league_id,
-                manager_id=manager_id,
-                connected_managers=list(self._state.connected_managers),
-                autodraft_deactivated=autodraft_deactivated,
-            ))
+            await self._broadcast(
+                DraftManagerConnectedEvent(
+                    league_id=self._state.league_id,
+                    manager_id=manager_id,
+                    connected_managers=list(self._state.connected_managers),
+                    autodraft_deactivated=autodraft_deactivated,
+                )
+            )
             return self.get_state_snapshot()
 
     async def disconnect_manager(self, manager_id: str) -> None:
@@ -490,11 +495,13 @@ class DraftEngine:
             self._state.connected_managers.discard(manager_id)
             logger.info("Manager '%s' disconnected", manager_id)
 
-            await self._broadcast(DraftManagerDisconnectedEvent(
-                league_id=self._state.league_id,
-                manager_id=manager_id,
-                connected_managers=list(self._state.connected_managers),
-            ))
+            await self._broadcast(
+                DraftManagerDisconnectedEvent(
+                    league_id=self._state.league_id,
+                    manager_id=manager_id,
+                    connected_managers=list(self._state.connected_managers),
+                )
+            )
 
     async def activate_autodraft(self, manager_id: str) -> None:
         """Manually activate autodraft for a manager.
@@ -559,11 +566,13 @@ class DraftEngine:
                 commissioner_id,
             )
 
-            await self._broadcast(DraftAssistedModeEnabledEvent(
-                league_id=self._state.league_id,
-                commissioner_id=commissioner_id,
-                current_pick_number=self._state.current_pick_number,
-            ))
+            await self._broadcast(
+                DraftAssistedModeEnabledEvent(
+                    league_id=self._state.league_id,
+                    commissioner_id=commissioner_id,
+                    current_pick_number=self._state.current_pick_number,
+                )
+            )
 
     async def submit_assisted_pick(
         self,
@@ -651,14 +660,16 @@ class DraftEngine:
                 commissioner_id,
             )
 
-            await self._broadcast(DraftPickMadeEvent(
-                league_id=self._state.league_id,
-                pick_number=record.pick_number,
-                manager_id=record.manager_id,
-                player_id=record.player_id,
-                autodrafted=False,
-                entered_by_commissioner=True,
-            ))
+            await self._broadcast(
+                DraftPickMadeEvent(
+                    league_id=self._state.league_id,
+                    pick_number=record.pick_number,
+                    manager_id=record.manager_id,
+                    player_id=record.player_id,
+                    autodrafted=False,
+                    entered_by_commissioner=True,
+                )
+            )
             await self._advance_to_next_turn()
 
             return record
@@ -696,7 +707,6 @@ class DraftEngine:
             assisted_mode=self._state.assisted_mode,
             assisted_audit_log=list(self._state.assisted_audit_log),
             ghost_manager_ids=list(self._state.ghost_manager_ids),
-
         )
 
     # ------------------------------------------------------------------
@@ -716,13 +726,15 @@ class DraftEngine:
         current_manager = self._state.current_manager_id
         assert current_manager is not None
 
-        await self._broadcast(DraftTurnChangedEvent(
-            league_id=self._state.league_id,
-            current_pick_number=self._state.current_pick_number,
-            current_manager_id=current_manager,
-            pick_duration=self._state.pick_duration,
-            turn_started_at=time.time(),
-        ))
+        await self._broadcast(
+            DraftTurnChangedEvent(
+                league_id=self._state.league_id,
+                current_pick_number=self._state.current_pick_number,
+                current_manager_id=current_manager,
+                pick_duration=self._state.pick_duration,
+                turn_started_at=time.time(),
+            )
+        )
 
         # In assisted mode: no timer, no autodraft — commissioner enters picks
         if self._state.assisted_mode:
@@ -821,14 +833,16 @@ class DraftEngine:
             autodraft_source=result.source,
         )
 
-        await self._broadcast(DraftPickMadeEvent(
-            league_id=self._state.league_id,
-            pick_number=record.pick_number,
-            manager_id=record.manager_id,
-            player_id=record.player_id,
-            autodrafted=True,
-            autodraft_source=result.source,
-        ))
+        await self._broadcast(
+            DraftPickMadeEvent(
+                league_id=self._state.league_id,
+                pick_number=record.pick_number,
+                manager_id=record.manager_id,
+                player_id=record.player_id,
+                autodrafted=True,
+                autodraft_source=result.source,
+            )
+        )
         await self._advance_to_next_turn()
 
     async def _advance_to_next_turn(self) -> None:
@@ -850,10 +864,12 @@ class DraftEngine:
             len(self._state.picks),
             self._state.assisted_mode,
         )
-        await self._broadcast(DraftCompletedEvent(
-            league_id=self._state.league_id,
-            total_picks=len(self._state.picks),
-        ))
+        await self._broadcast(
+            DraftCompletedEvent(
+                league_id=self._state.league_id,
+                total_picks=len(self._state.picks),
+            )
+        )
 
     # ------------------------------------------------------------------
     # Internal — state mutation helpers
@@ -884,9 +900,7 @@ class DraftEngine:
         self._state.picks.append(record)
 
         # Update global drafted set
-        self._state.drafted_player_ids = (
-            self._state.drafted_player_ids | {player_id}
-        )
+        self._state.drafted_player_ids = self._state.drafted_player_ids | {player_id}
 
         # Remove from available pool
         self._available_players = [

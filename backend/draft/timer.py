@@ -120,7 +120,9 @@ class DraftTimer:
         if self._task is not None and not self._task.done():
             self._task.cancel()
             self._cancelled = True
-            logger.debug("DraftTimer cancelled with %.2fs remaining", self.time_remaining)
+            logger.debug(
+                "DraftTimer cancelled with %.2fs remaining", self.time_remaining
+            )
 
     @property
     def time_remaining(self) -> float:
@@ -145,11 +147,7 @@ class DraftTimer:
     @property
     def is_running(self) -> bool:
         """Return True if the countdown is active (started, not done)."""
-        return (
-            self._task is not None
-            and not self._task.done()
-            and not self._cancelled
-        )
+        return self._task is not None and not self._task.done() and not self._cancelled
 
     @property
     def is_expired(self) -> bool:

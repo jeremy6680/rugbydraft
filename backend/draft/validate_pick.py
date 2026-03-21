@@ -31,9 +31,9 @@ from app.models.player import AvailabilityStatus, PlayerSummary
 # Constants (CDC v3.1 section 6, D-016)
 # ---------------------------------------------------------------------------
 
-ROSTER_SIZE: int = 30          # 15 starters + 15 bench per roster
-MAX_PER_NATION: int = 8        # max players from same nation (international)
-MAX_PER_CLUB: int = 6          # max players from same club (club competition)
+ROSTER_SIZE: int = 30  # 15 starters + 15 bench per roster
+MAX_PER_NATION: int = 8  # max players from same nation (international)
+MAX_PER_CLUB: int = 6  # max players from same club (club competition)
 
 
 # ---------------------------------------------------------------------------
@@ -96,9 +96,7 @@ class RosterFullError(PickValidationError):
 
     def __init__(self, manager_id: str) -> None:
         super().__init__(
-            message=(
-                f"Manager '{manager_id}' roster is full ({ROSTER_SIZE} players)."
-            ),
+            message=(f"Manager '{manager_id}' roster is full ({ROSTER_SIZE} players)."),
             code="ROSTER_FULL",
         )
 

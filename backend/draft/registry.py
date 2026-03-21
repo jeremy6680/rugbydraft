@@ -69,9 +69,7 @@ class DraftRegistry:
                     "Call remove() before registering a new one."
                 )
             self._engines[league_id] = engine
-            logger.info(
-                "DraftRegistry: engine registered for league '%s'", league_id
-            )
+            logger.info("DraftRegistry: engine registered for league '%s'", league_id)
 
     def get(self, league_id: str) -> Optional[DraftEngine]:
         """Return the active DraftEngine for a league, or None.
@@ -97,9 +95,7 @@ class DraftRegistry:
         async with self._lock:
             engine = self._engines.pop(league_id, None)
             if engine is not None:
-                logger.info(
-                    "DraftRegistry: engine removed for league '%s'", league_id
-                )
+                logger.info("DraftRegistry: engine removed for league '%s'", league_id)
 
     def active_league_ids(self) -> list[str]:
         """Return the list of league IDs with an active draft engine.

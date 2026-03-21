@@ -63,7 +63,7 @@ BENCH_COVERAGE_MINIMUMS: dict[str, int] = {
     "prop": 2,
     "hooker": 1,
     "lock": 1,
-    "back_row": 1,   # flanker OR number_8 (D-013)
+    "back_row": 1,  # flanker OR number_8 (D-013)
     "scrum_half": 1,
     "fly_half": 1,
     "centre": 1,
@@ -130,8 +130,7 @@ class RosterCoverageError(Exception):
         self.missing = missing
         self.code = "ROSTER_COVERAGE_INSUFFICIENT"
         positions_str = ", ".join(
-            f"{group} (need {count} more)"
-            for group, count in sorted(missing.items())
+            f"{group} (need {count} more)" for group, count in sorted(missing.items())
         )
         self.message = (
             f"Bench coverage insufficient: {positions_str}. "

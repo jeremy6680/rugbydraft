@@ -463,3 +463,571 @@ writing cookies directly onto it before returning.
 - middleware.ts order is: intlMiddleware → Supabase getUser → route guard
 - auth/callback/route.ts writes cookies onto redirectResponse, not cookieStore
 - /auth/callback is excluded from the middleware matcher entirely
+
+---
+
+## D-019 — Snake order as a pure function, tested before FastAPI integration
+
+**Date:** 2026-03-19
+**Status:** Accepted
+
+**Context:** The snake draft order algorithm is the foundational invariant of the
+draft engine. It needs to be correct before any FastAPI or database integration.
+
+**Options considered:**
+
+- A) Write the algorithm directly inside the DraftEngine class (FastAPI layer).
+- B) Extract it as a pure Python function, tested in full isolation first.
+
+**Decision:** Option B — pure function in `backend/draft/snake_order.py`,
+tested with 33 unit tests before any integration.
+
+**Rationale:**
+
+- A pure function `f(managers, num_rounds) → list[str]` is deterministic and
+  trivially testable with no infrastructure (no DB, no server, no async).
+- A bug in pick ordering (wrong manager gets a turn) would be catastrophic
+  and hard to debug inside a running FastAPI server.
+- The function is reused as-is by the DraftEngine — no duplication.
+- 33 tests cover 2–6 managers, full 30-round drafts, edge cases, and error paths.
+
+**Consequences:**
+
+- `snake_order.py` has zero external dependencies — pure Python stdlib.
+- `get_pick_owner(pick_number, managers)` is O(1): no need to generate
+  the full order to answer "who picks now?".
+- The DraftEngine will call these functions directly — no reimplementation.
+
+---
+
+## D-020 — DraftTimer as an isolated asyncio class, tested before DraftEngine integration
+
+**Date:** 2026-03-19
+**Status:** Accepted
+
+**Context:** The server-side pick timer is a critical component — expiration
+triggers autodraft automatically. It must be reliable before being wired into
+the DraftEngine.
+
+**Options considered:**
+
+- A) Implement the timer directly inside the DraftEngine class.
+- B) Extract it as a standalone asyncio class, tested in isolation first.
+
+**Decision:** Option B — `DraftTimer` in `backend/draft/timer.py`, tested
+with 22 unit tests before any DraftEngine integration.
+
+**Rationale:**
+
+- `asyncio.Task` + `asyncio.sleep` runs inside the FastAPI event loop —
+  zero thread overhead, clean cancellation via `Task.cancel()`.
+- `asyncio.get_event_loop().time()` (monotonic clock) is used for
+  `time_remaining` — immune to system clock changes and NTP adjustments.
+- The `on_expire` callback is async, allowing the DraftEngine to await
+  downstream effects (autodraft, Realtime broadcast) without blocking.
+- `asyncio.coroutine` was removed in Python 3.11 — tests use `async def`
+  dummy coroutines instead.
+- 22 tests cover: init, start, expiration, cancellation, idempotency,
+  and the CDC reconnection protocol (section 7.4).
+
+**Consequences:**
+
+- One `DraftTimer` instance per active pick slot.
+- The DraftEngine creates a new timer when a pick slot opens and calls
+  `cancel()` when the manager picks before expiration.
+- `time_remaining` is queryable at any point — used in the reconnection
+  state snapshot sent to reconnecting clients.
+
+---
+
+## D-021 — Pick validation as a pure function with typed exceptions
+
+**Date:** 2026-03-19
+**Status:** Accepted
+
+**Context:** Pick validation is the guard layer between a manager's pick request
+and the DraftEngine accepting it. It must be reliable, explicit, and testable
+before being wired into FastAPI.
+
+**Decision:** `validate_pick()` in `backend/draft/validate_pick.py` — pure
+function, no I/O, typed exceptions per failure reason, tested with 17 unit tests.
+
+**Three validation layers (in order):**
+
+1. Turn validation — is it this manager's turn? (NotYourTurnError)
+2. Player availability — not drafted, not injured/suspended (PlayerAlreadyDraftedError, PlayerUnavailableError)
+3. Roster constraints — not full, nationality/club limits respected (RosterFullError, NationalityLimitError, ClubLimitError)
+
+**Rationale:**
+
+- Typed exceptions (one per failure reason) give the DraftEngine precise
+  control: each maps to a distinct HTTP 422 code + i18n key for the frontend.
+- The `.code` attribute on each exception is machine-readable — the frontend
+  uses it as a key for `messages/fr.json` error display.
+- Validation stops at the first failure — no need to collect all errors
+  in a draft context (the manager must fix one issue at a time).
+- A `RosterSnapshot` dataclass isolates the validation input from DB objects.
+
+**Bug found during tests:** `test_nationality_limit_not_applied_in_club` was
+constructing a roster with 8 players from the same club (exceeding MAX_PER_CLUB=6),
+causing a spurious ClubLimitError. Fixed by capping test clubs at MAX_PER_CLUB-1.
+Lesson: test fixtures must not violate unrelated constraints.
+
+**Consequences:**
+
+- The DraftEngine wraps `validate_pick()` in a try/except and maps each
+  exception type to the appropriate HTTP response + Realtime broadcast.
+- `RosterSnapshot` is built from the DraftState in memory — no DB query
+  needed at pick validation time.
+- Constants `MAX_PER_NATION=8` and `MAX_PER_CLUB=6` are defined here (D-016).
+
+---
+
+## D-022 — Autodraft as a pure function, reusing validate_pick constraints
+
+**Date:** 2026-03-19
+**Status:** Accepted
+
+**Context:** Autodraft must respect the same roster constraints as a manual pick
+(nationality/club limits). Two approaches were considered for constraint checking.
+
+**Options considered:**
+
+- A) Duplicate the constraint logic inside autodraft.py.
+- B) Reuse \_validate_roster_constraints() from validate_pick.py directly.
+
+**Decision:** Option B — autodraft calls \_validate_roster_constraints() as a
+single source of truth for roster rules. The internal helper is imported directly.
+
+**Rationale:**
+
+- Zero duplication: constraint logic lives in one place only.
+- If MAX_PER_NATION or MAX_PER_CLUB change, autodraft picks up the change
+  automatically — no second file to update.
+- \_passes_roster_constraints() wraps the call in a try/except and returns
+  a bool — clean interface for the autodraft iteration loop.
+- Note: RosterFullError is intentionally NOT caught in autodraft — if the
+  roster is full, autodraft should never have been triggered (DraftEngine bug).
+
+**Selection algorithm:**
+
+1. Preference list (manager's personal ranking) — first available valid player.
+2. Default value (available_players pre-sorted by value_score desc by DraftEngine)
+   — first player that passes constraints.
+
+**Consequences:**
+
+- available_players must be pre-sorted by value_score descending by the caller
+  (DraftEngine). autodraft.py does not sort — separation of responsibilities.
+- AutodraftResult.source = "preference_list" | "default_value" — logged for
+  audit trail and future analytics.
+- AutodraftError (no valid player found) indicates a data integrity issue —
+  DraftEngine must halt the draft and alert the commissioner.
+
+---
+
+## D-023 — DraftEngine: asyncio.create_task() for autodraft to prevent recursion
+
+**Date:** 2026-03-19
+**Status:** Accepted
+
+**Context:** When all managers are in autodraft, \_start_current_turn() →
+\_run_autodraft_for_current_pick() → \_advance_to_next_turn() → \_start_current_turn()
+creates a synchronous recursive call chain up to N_managers × 30 levels deep.
+This caused RecursionError / AutodraftError in tests and made start_draft()
+block until the entire draft completed.
+
+**Decision:** In \_start_current_turn(), autodraft picks are scheduled via
+asyncio.create_task() instead of direct await. This yields control back to
+the event loop between each pick, breaking the recursion.
+
+**Consequences:**
+
+- start_draft() returns immediately even if all managers are in autodraft.
+- connect_manager() can deactivate autodraft between picks (reconnection protocol).
+- The lock must be re-acquired inside \_run_autodraft_for_current_pick() since
+  it is now called from a separate Task.
+
+**Bug found during tests — reconnection with autodraft:**
+connect_manager() originally checked self.\_current_timer is not None to
+detect "own turn with time remaining". But in autodraft mode there is no
+timer — the condition silently failed. Fixed by checking pick_not_yet_made
+(no pick recorded for current_pick_number) instead. When a manager reconnects
+during their autodraft turn before the task executes, we discard them from
+autodraft_managers and start a real timer for manual control.
+
+**Bug found during tests — homogeneous player pool:**
+make_player_pool() in tests generated all players with nationality="FRA".
+After 8 picks, MAX_PER_NATION was hit and AutodraftError was raised.
+Fixed by rotating through 10 nationalities in the test pool.
+Both bugs were in the tests, not in the engine logic.
+
+---
+
+## D-024 — Broadcaster as injected dependency, Protocol over ABC
+
+**Date:** 2026-03-19
+**Status:** Accepted
+
+**Context:** The DraftEngine needs to broadcast state changes to Supabase
+Realtime after every mutation. Two questions arose: (1) how to decouple the
+engine from the Supabase SDK for testing, and (2) whether to use ABC or Protocol.
+
+**Options considered:**
+
+- A) Hardcode Supabase calls inside DraftEngine.\_broadcast().
+- B) Inject a broadcaster via the constructor — Protocol interface.
+- C) Inject a broadcaster via the constructor — ABC interface.
+
+**Decision:** Option B — BroadcasterProtocol (PEP 544 structural typing).
+Injected via DraftEngine.**init**(broadcaster=...), defaulting to MockBroadcaster.
+
+**Rationale:**
+
+- Injection: DraftEngine has no knowledge of Supabase. In tests, MockBroadcaster
+  captures events with zero I/O. In production, SupabaseBroadcaster is passed in.
+- Protocol over ABC: duck typing is more idiomatic Python 3.10+. Any class with
+  async broadcast(event) satisfies the interface — no explicit inheritance needed.
+  @runtime_checkable allows isinstance() checks for FastAPI DI validation.
+- MockBroadcaster default: the engine is safe to instantiate anywhere (scripts,
+  tests, local dev) without a Supabase connection.
+
+**Broadcast failure is non-fatal:** SupabaseBroadcaster.broadcast() catches all
+exceptions and logs them. A Realtime outage must never crash the draft — clients
+call GET /draft/{id}/state for a full snapshot (reconnection protocol, D-001).
+
+**Clock synchronisation over tick streaming:** DraftTurnChangedEvent includes
+turn_started_at + pick_duration. Clients compute the countdown locally:
+remaining = pick_duration - (now - turn_started_at). No per-second tick
+broadcast needed — far fewer messages, immune to dropped ticks.
+
+**New files:**
+
+- backend/draft/events.py — typed DraftEvent dataclasses (6 event types)
+- backend/draft/broadcaster.py — BroadcasterProtocol, MockBroadcaster, SupabaseBroadcaster
+
+**Consequences:**
+
+- DraftEngine.**init**() gains a broadcaster parameter (optional, default MockBroadcaster).
+- \_broadcast(event: DraftEvent) replaces the stub \_broadcast() — callers pass typed events.
+- 8 new tests in test_engine.py validate the broadcast contract (event types + payloads).
+- Total test count: 114 → 122 after this step (26 in test_engine.py alone).
+
+---
+
+## D-025 — Reconnection protocol: DraftRegistry + 3 FastAPI endpoints
+
+**Date:** 2026-03-20
+**Status:** Accepted
+
+**Context:** The reconnection logic already lived in `connect_manager()` inside
+the DraftEngine (D-001, D-023). What was missing was the FastAPI layer to expose
+it: a registry to find active engines by league_id, and endpoints for clients to
+call on reconnection.
+
+**Decision:** Three components added:
+
+1. `backend/draft/registry.py` — `DraftRegistry`: thread-safe dict
+   `league_id → DraftEngine`, stored as `app.state.draft_registry` in the
+   FastAPI lifespan. Mutations (register, remove) protected by asyncio.Lock.
+   Reads (get) are lock-free (GIL + atomic dict lookup sufficient in CPython).
+
+2. `backend/app/schemas/draft.py` — `DraftStateSnapshotResponse` and
+   `PickRecordResponse`: Pydantic response models mirroring the internal
+   DraftStateSnapshot dataclass. Separation of API contract from engine internals.
+
+3. `backend/app/routers/draft.py` — three endpoints:
+   - `POST /draft/{league_id}/connect` — calls `connect_manager()`, returns snapshot.
+     Deactivates autodraft and starts a manual timer if reconnecting during own turn.
+   - `POST /draft/{league_id}/disconnect` — calls `disconnect_manager()`, returns 200.
+   - `GET /draft/{league_id}/state` — calls `get_state_snapshot()`, read-only.
+     Polling fallback when Supabase Realtime is unavailable.
+
+**FastAPI lifespan pattern:** `app.state.draft_registry = DraftRegistry()` is
+initialised in `@asynccontextmanager async def lifespan(app)` — the modern
+FastAPI pattern replacing deprecated `@app.on_event("startup")`.
+
+**HTTP 204 note:** FastAPI 0.115.12 raises an AssertionError when a POST endpoint
+declares `status_code=204` without `response_class=Response` — and even with it
+in some configurations. Decision: use HTTP 200 with `response_model=None` for
+disconnect. Functionally equivalent; avoids framework friction.
+
+**Test timing note (asyncio.create_task):** Test 1 (reconnect during own turn)
+initially used `await asyncio.sleep(0)` to schedule the autodraft task without
+executing it. In CPython 3.13, `sleep(0)` is sufficient to execute the task
+in some event loop configurations, causing the pick to be made before reconnect.
+Fixed by removing the sleep entirely — `connect_manager()` under its lock runs
+before the scheduled task can execute, which is the exact reconnection window
+the test is validating.
+
+**Consequences:**
+
+- `app/main.py` gains a lifespan context manager — `DraftRegistry` initialised at startup.
+- `draft.router` activated in `main.py` (was commented as "Phase 2").
+- 4 new tests in `tests/test_reconnection.py` — all pass (126/126 total).
+- New files: `registry.py`, `schemas/draft.py`, `routers/draft.py`.
+- Total test count: 122 → 126.
+
+---
+
+## D-026 — Assisted Draft: commissioner_id in DraftState, audit log in memory
+
+**Date:** 2026-03-20
+**Status:** Accepted
+
+**Context:** The Assisted Draft mode (CDC v3.1, section 7.5) requires (1) authorising
+only the league commissioner to activate the mode and submit picks, and (2) an audit
+log of all commissioner-entered picks, visible to all managers.
+
+Two architectural questions arose:
+
+**Question 1 — Where does assisted_mode state live?**
+
+- Option A: Only in the DB (`drafts.is_assisted_mode`) — survives FastAPI restart,
+  but requires a DB query on every pick to check the flag.
+- Option B: Only in `DraftState` (in memory) — consistent with all other draft state,
+  lost on FastAPI restart.
+- Option C: Both — `DraftState.assisted_mode` (runtime authority) + persisted to
+  `drafts.is_assisted_mode` on enable (for restart recovery).
+
+**Decision:** Option B for V1. The `drafts.is_assisted_mode` column already exists
+in the schema (001_initial_schema.sql) and will be used for restart recovery in a
+future phase. In V1, restart mid-assisted-draft is an edge case without a documented
+recovery procedure (tracked in NEXT_STEPS.md).
+
+**Rationale:** Consistent with D-001 — FastAPI is the authority of state. All runtime
+draft state lives in `DraftState`. Adding a DB sync on every `enable_assisted_mode()`
+call would complicate the engine without providing value until restart recovery is
+implemented.
+
+**Question 2 — Where does the audit log live?**
+
+- Option A: DB only (`draft_picks.entered_by_commissioner`) — survives restart,
+  requires a DB query to serve GET /assisted/log.
+- Option B: In memory (`DraftState.assisted_audit_log`) + DB column as persistence
+  — GET /assisted/log served from memory during active draft, from DB after completion.
+
+**Decision:** Option B for V1. The `draft_picks.entered_by_commissioner` column
+already exists in the schema. In V1, the in-memory audit log is authoritative during
+an active draft. Persistence to DB is implemented when the pick persistence layer
+(Phase 3) is built.
+
+**commissioner_id in DraftState:** Added as a required field (with default
+`"commissioner-default"` for tests). The commissioner is set at engine creation and
+never changes — it does not need to be updatable.
+
+**New files:**
+
+- `backend/draft/assisted.py` — pure logic: typed errors, `AssistedPickAuditEntry`,
+  pure validation functions (`validate_commissioner`, `validate_assisted_mode_active`, etc.)
+- `backend/app/routers/draft_assisted.py` — 3 endpoints:
+  POST /assisted/enable, POST /assisted/pick, GET /assisted/log
+- `backend/tests/draft/test_assisted.py` — 19 tests across 5 classes
+
+**Changes to existing files:**
+
+- `draft/engine.py` — `DraftState` gains `assisted_mode`, `assisted_audit_log`,
+  `commissioner_id`. `DraftEngine` gains `enable_assisted_mode()`,
+  `submit_assisted_pick()`, `get_assisted_audit_log()`. `_record_pick()` gains
+  `entered_by_commissioner` flag. `_start_current_turn()` is assisted-mode aware
+  (no timer started in assisted mode).
+- `draft/events.py` — `DraftPickMadeEvent` gains `entered_by_commissioner` field.
+  New event: `DraftAssistedModeEnabledEvent`.
+- `app/schemas/draft.py` — `PickRecordResponse` gains `entered_by_commissioner` field.
+- `app/main.py` — `draft_assisted.router` mounted.
+- `tests/draft/test_engine.py` and `tests/test_reconnection.py` — `make_engine()`
+  helpers updated with `commissioner_id="test-commissioner"`.
+
+**Consequences:**
+
+- `DraftEngine.__init__()` gains `commissioner_id: str = "commissioner-default"`.
+  Default value preserves backward compatibility with existing tests.
+- HTTP 403 for non-commissioner actions (not 401 — the user is authenticated,
+  just not authorised for this specific resource).
+- HTTP 409 Conflict for mode guard errors (already active / not active) — more
+  precise than 422 which is reserved for data validation failures.
+- Total test count: 126 → 145 (19 new tests in test_assisted.py).
+
+---
+
+## D-027 — Ghost team identity as a structural property, not a runtime state
+
+**Date:** 2026-03-21
+**Status:** Accepted
+
+**Context:** Ghost teams (CDC section 11) are computer-managed teams that fill
+the bracket when the manager count is odd or below the competition minimum.
+They must always autodraft — never receive a timer, never take manual control.
+Two approaches were considered for implementing this constraint.
+
+**Options considered:**
+
+- A) Add ghost team IDs to `autodraft_managers` at draft start, like a
+  manager who never connected. Reuse the existing autodraft path entirely.
+- B) Treat ghost status as a structural property of the manager ID
+  (`ghost_manager_ids: frozenset[str]` on `DraftState`), separate from
+  the dynamic `autodraft_managers` set.
+
+**Decision:** Option B — ghost status is a structural (immutable) property,
+not a dynamic runtime state.
+
+**Rationale:**
+
+- `autodraft_managers` is a dynamic set: managers enter it when their timer
+  expires, and leave it when they reconnect. Ghost teams must never leave it.
+  Mixing structural and dynamic state in the same set creates a latent bug:
+  `connect_manager()` calls `autodraft_managers.discard(manager_id)`, which
+  would silently give a ghost team manual control if Option A were used.
+- A `frozenset` signals immutability to readers: ghost status never changes
+  during a draft. `autodraft_managers` changes constantly.
+- `is_ghost_id()` in `ghost_team.py` is the single source of truth for ghost
+  detection — one import, one check, used in `_start_current_turn()` and
+  `connect_manager()`.
+
+**Implementation:**
+
+- `backend/draft/ghost_team.py` — `GhostTeam` dataclass, `create_ghost_teams()`,
+  `ghost_teams_needed()`, `is_ghost_id()`, `generate_ghost_name()`.
+- `DraftState.ghost_manager_ids: frozenset[str]` — immutable after init.
+- `DraftStateSnapshot.ghost_manager_ids: list[str]` — exposed to the frontend
+  so it can render ghost teams differently (no timer, special avatar, etc.).
+- `_start_current_turn()`: `is_ghost_id(current_manager)` → immediate
+  `asyncio.create_task(autodraft)`, no timer started.
+- `connect_manager()`: `not is_ghost_id(manager_id)` guard prevents ghost
+  teams from ever deactivating their autodraft status.
+
+**Consequences:**
+
+- Phase 3 waiver/trade blocking: `is_ghost_id()` is already importable
+  anywhere. The waiver and trade endpoints simply call it as a guard.
+- Phase 3 IR release: ghost team injured player auto-release (D-010) will
+  use the same `is_ghost_id()` check to identify the source team.
+- Ghost teams have no preference list — `_preference_lists.get(ghost_id, [])`
+  returns `[]`, so autodraft always falls through to `default_value` source.
+  This is correct per CDC section 11.
+
+---
+
+## D-028 — Post-draft roster coverage validation: warning, not hard block
+
+**Date:** 2026-03-21
+**Status:** Accepted
+
+**Context:** CDC v3.1 section 6.2 defines minimum bench coverage requirements
+(e.g. 2 props, 1 hooker, 1 lock, etc.). The question was: should a coverage
+failure at draft completion block the draft from completing, or log a warning
+and let the draft complete anyway?
+
+**Options considered:**
+
+- A) Hard block — refuse to mark the draft as COMPLETED if any roster fails
+  coverage. Commissioner must manually correct the roster before proceeding.
+- B) Warning only — mark the draft COMPLETED regardless, log the coverage
+  failure, notify the commissioner. Picks are final.
+
+**Decision:** Option B — warning only in V1.
+
+**Rationale:**
+
+- Coverage failures in practice only occur via autodraft (human managers
+  are guided by the frontend's real-time coverage indicator in Phase 4).
+- Blocking the draft would strand all managers in a completed-but-not-completed
+  state with no UI to fix it — worse UX than a warning.
+- The autodraft algorithm (Phase 2) does not yet enforce coverage minimums
+  when selecting players. Enforcing coverage at autodraft selection time
+  is the correct long-term fix — deferred to Phase 3 or V2 (see consequences).
+- Picks are final by design (CDC v3.1, section 7) — no rollback mechanism exists.
+
+**Consequences:**
+
+- `DraftEngine._complete_draft()` calls `validate_roster_coverage()` per manager
+  and logs `WARNING` on failure. The draft completes regardless.
+- A `TODO` comment marks the broadcast point for Phase 4:
+  `RosterCoverageWarningEvent` will alert the commissioner in the UI.
+- Future improvement (V2): autodraft `select_autodraft_pick()` should enforce
+  coverage minimums in its selection loop, not just nationality/club limits.
+  This would prevent coverage failures from occurring at all.
+
+---
+
+## D-029 — FastAPI restart mid-draft: recovery procedure
+
+**Date:** 2026-03-21
+**Status:** Accepted
+
+**Context:** DraftEngine state is held entirely in memory (D-001). If the
+FastAPI process restarts mid-draft (crash, deploy, OOM kill), all in-memory
+state is lost. Clients will attempt to reconnect but the engine is gone.
+This is the highest-severity operational risk in Phase 2.
+
+**The problem in detail:**
+
+```
+Draft running: pick 14/90, timer ticking for manager M2.
+FastAPI process killed (OOM / deploy / crash).
+M2's browser is still open — timer ticks down client-side.
+M1 submits a pick → 503 / connection refused.
+Supabase Realtime channel goes silent.
+All managers see a frozen draft room.
+```
+
+**What is persisted vs lost:**
+
+| Data                  | Persisted                                | Lost on restart    |
+| --------------------- | ---------------------------------------- | ------------------ |
+| Picks already made    | ✅ `draft_picks` table                   | —                  |
+| Current pick number   | ✅ `drafts.current_pick_number`          | —                  |
+| Draft status          | ✅ `drafts.status`                       | —                  |
+| Assisted audit log    | ✅ `draft_picks.entered_by_commissioner` | —                  |
+| In-memory timer state | ❌ —                                     | ✅ lost            |
+| Autodraft manager set | ❌ —                                     | ✅ lost            |
+| Connected manager set | ❌ —                                     | ✅ lost            |
+| Available player pool | ❌ —                                     | ✅ rebuilt from DB |
+
+**Decision:** Manual recovery procedure in V1. Automated recovery deferred to V2.
+
+**V1 recovery procedure (commissioner-initiated):**
+
+1. **Detect the restart** — clients see Realtime channel go silent +
+   HTTP 503 on pick submission. FastAPI health endpoint (`GET /health`)
+   returns 200 once the process is back up.
+
+2. **Commissioner switches to Assisted Draft** — once FastAPI is back,
+   the commissioner calls `POST /draft/{league_id}/assisted/enable`.
+   This is the intended fallback for any draft disruption (CDC v3.1, section 7.5).
+
+3. **Engine reconstruction** — the `DraftRegistry` is empty after restart.
+   The first call to any draft endpoint triggers engine reconstruction:
+   - Read `drafts` table: status, current_pick_number, pick_duration,
+     competition_type, commissioner_id.
+   - Read `draft_picks` table: all picks already made → rebuild
+     `drafted_player_ids`, `rosters`, `picks` list.
+   - Read `league_members` table: manager list, ghost team IDs.
+   - Reconstruct `draft_order` via `generate_snake_order()` with the
+     same shuffled manager order (stored in `drafts.manager_order` — JSONB).
+   - Set `assisted_mode = True` immediately (step 2 above).
+   - All managers start as disconnected — they reconnect via `POST /connect`.
+
+4. **Resume** — commissioner enters remaining picks via Assisted Draft.
+   No timer, no autodraft race condition. Audit log shows the restart gap.
+
+**Implementation status:** Reconstruction logic (`reconstruct_engine_from_db()`)
+is NOT implemented in Phase 2. The procedure above defines the contract —
+implementation is a Phase 3 prerequisite before first real draft.
+
+**What must be added to the DB schema before Phase 3:**
+
+- `drafts.manager_order` — JSONB array storing the shuffled manager order
+  after the random draw. Without this, `generate_snake_order()` cannot
+  produce the same draft order after a restart.
+  → Migration required: `ALTER TABLE drafts ADD COLUMN manager_order JSONB`.
+
+**Consequences:**
+
+- Phase 2 drafts (localhost testing, demo) accept the restart risk — data
+  loss is acceptable at this stage.
+- Before first real draft (Phase 3 / beta): `reconstruct_engine_from_db()`
+  must be implemented and tested, and `drafts.manager_order` migration applied.
+- The `TODO` in `DraftRegistry` marks the reconstruction hook point.
+- CI test required in Phase 3: simulate restart at pick N, reconstruct,
+  verify remaining picks complete correctly.

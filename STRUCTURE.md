@@ -2,7 +2,7 @@
 
 > Repository structure explained.
 > Updated at each phase — reflects the current state of the codebase.
-> Last updated: 2026-03-18 (Phase 1 — Foundations)
+> Last updated: 2026-03-19 (Phase 2 — Draft Engine, broadcast wiring)
 
 ---
 
@@ -63,14 +63,85 @@ backend/
 │   ├── routers/
 │   │   ├── __init__.py
 │   │   └── health.py      # GET /health — liveness probe (public, no JWT)
+│   │   ├── draft.py           # POST /connect, POST /disconnect, GET /state
+│   │   └── draft_assisted.py  # POST /assisted/enable, POST /assisted/pick
+│   │                          # GET /assisted/log — commissioner-only (403 if not)
+│   ├── schemas/
+│   │ ├── **init**.py
+│   │ └── draft.py # Pydantic response models for draft endpoints (D-025)
+│   │ # DraftStateSnapshotResponse, PickRecordResponse
+│   │ # Mirrors internal DraftStateSnapshot dataclass
 │   └── models/            # Pydantic models — to be completed in Phase 2
 │       ├── __init__.py
 │       ├── user.py
 │       ├── player.py
 │       └── league.py
+├── draft/
+│   ├── __init__.py          # Draft engine package marker
+│   ├── snake_order.py       # Pure snake draft order algorithm (no I/O)
+│   │                        # Functions: generate_snake_order, get_pick_owner,
+│   │                        # build_pick_slots, get_manager_picks
+│   ├── timer.py             # Server-side pick countdown (asyncio.Task)
+│   │                        # DraftTimer: start(), cancel(), time_remaining
+│   │                        # on_expire callback triggers autodraft
+│   ├── validate_pick.py     # Pure pick validation — 3 layers, typed exceptions
+│   │                        # validate_pick(), RosterSnapshot, PickValidationError
+│   │                        # Constants: ROSTER_SIZE=30, MAX_PER_NATION=8, MAX_PER_CLUB=6
+│   ├── autodraft.py         # Autodraft pick selection algorithm (pure function)
+│   │                        # select_autodraft_pick(): preference list → default value
+│   │                        # AutodraftResult, AutodraftError
+│   ├── ghost_team.py        # Ghost team generation — pure functions, no I/O (CDC s.11)
+│   │                        # GhostTeam dataclass (frozen), create_ghost_teams(n)
+│   │                        # ghost_teams_needed(manager_count) — bracket completion logic
+│   │                        # is_ghost_id() — single source of truth for ghost detection
+│   │                        # generate_ghost_name(), generate_ghost_avatar()
+│   ├── events.py            # Typed broadcast event dataclasses (D-024)
+│   │                        # DraftStartedEvent, DraftPickMadeEvent, DraftTurnChangedEvent
+│   │                        # DraftManagerConnectedEvent, DraftManagerDisconnectedEvent
+│   │                        # DraftCompletedEvent — all extend DraftEvent base class
+│   ├── broadcaster.py       # Broadcast layer — Supabase Realtime (D-024)
+│   │                        # BroadcasterProtocol (PEP 544), MockBroadcaster (tests),
+│   │                        # SupabaseBroadcaster (production, channel per league)
+│   ├── assisted.py          # Assisted Draft pure logic (CDC 7.5)
+│   │                        # AssistedPickAuditEntry, AssistedDraftError subtypes
+│   │                        # validate_commissioner, validate_assisted_mode_active
+│   │                        # build_audit_entry — all pure functions, no I/O
+│   ├── roster_coverage.py   # Post-draft roster coverage validation (CDC 6.2)
+│   │                        # validate_roster_coverage(): pure function, no I/O
+│   │                        # RosterCoverageResult, RosterCoverageError,
+│   │                        # RosterIncompleteError — called by _complete_draft()
+│   ├── engine.py            # DraftEngine — authority of state (D-001)
+│   │                        # Orchestrates snake_order, timer, validate_pick, autodraft
+│   │                        # broadcaster injected via __init__ (default: MockBroadcaster)
+│   │                        # DraftState, DraftStateSnapshot, PickRecord, DraftStatus
+│   │                        # asyncio.Lock prevents race conditions on submit_pick()
+│   └── registry.py          # DraftRegistry — thread-safe dict league_id → DraftEngine
+│                            # Stored as app.state.draft_registry (FastAPI lifespan)
+│                            # register(), get(), remove(), active_league_ids()
 ├── tests/
 │   ├── __init__.py
-│   └── test_health.py     # 8 tests — health endpoint + auth middleware
+│   ├── test_health.py       # 8 tests — health endpoint + auth middleware
+│   ├── test_reconnection.py # 4 tests — reconnection protocol (D-025)
+│   │                        # reconnect during own turn, after timer expired,
+│   │                        # while other manager picks, GET state no side effects
+│   └── draft/
+│       ├── __init__.py              # Draft tests package marker
+│       ├── test_snake_order.py      # 33 unit tests for snake_order.py
+│       ├── test_timer.py            # 22 unit tests for timer.py (pytest-asyncio)
+│       ├── test_validate_pick.py    # 17 unit tests for validate_pick.py
+│       ├── test_autodraft.py        # 16 unit tests for autodraft.py
+│       ├── test_ghost_team.py       # 41 unit tests for ghost_team.py
+│       │                            # TestIsGhostId, TestGenerateGhostName,
+│       │                            # TestGenerateGhostAvatar, TestCreateGhostTeams,
+│       │                            # TestGhostTeamsNeeded
+│       ├── test_engine.py           # 53 unit tests for engine.py + ghost team integration
+│       ├── test_assisted.py         # 19 tests — Assisted Draft mode (D-026)
+│       │                            # TestEnableAssistedMode (5), TestSubmitAssistedPick (8)
+│       │                            # TestAuditLog (3), TestAssistedBroadcastEvents (2)
+│       │                            # TestFullAssistedDraftFlow (1)
+│       └── test_roster_constraints.py # 14 tests — bench coverage validation
+│                                    # TestValidRosters (4), TestMissingPositionCoverage (5)
+│                                    # TestMultiPositionCoverage (2), TestIncompleteRoster (3)
 ├── pytest.ini             # pytest config — asyncio strict mode
 ├── requirements.txt       # Production dependencies (pinned to minor version)
 └── requirements-dev.txt   # Dev/CI dependencies (pytest, ruff, mypy)

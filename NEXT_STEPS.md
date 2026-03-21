@@ -1,7 +1,7 @@
 # NEXT_STEPS.md — RugbyDraft
 
-> Current status: Phase 1 complete. Phase 2 ready to start.
-> Last updated: 2026-03-19
+> Current status: Phase 2 in progress — Draft Assistée complete. Ghost team next.
+> Last updated: 2026-03-20
 
 ---
 
@@ -108,48 +108,50 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ### Core draft logic
 
-- [ ] Snake draft order algorithm (N managers, 2N picks per cycle)
-- [ ] Server-side timer (FastAPI manages countdown, not clients)
-- [ ] Pick validation: correct manager, correct turn, player available
-- [ ] Autodraft algorithm: pick from preference list, or by default value score
-- [ ] Timeout → auto-activate autodraft for remaining picks
-- [ ] "Manager never connected" → full autodraft from draft start
+- [x] Snake draft order algorithm (N managers, 2N picks per cycle)
+- [x] Server-side timer (FastAPI manages countdown, not clients)
+- [x] Pick validation: correct manager, correct turn, player available
+- [x] Autodraft algorithm: pick from preference list, or by default value score
+- [x] Timeout → auto-activate autodraft for remaining picks
+- [x] "Manager never connected" → full autodraft from draft start
 
 ### Realtime (Supabase Realtime as broadcast)
 
-- [ ] FastAPI broadcasts state updates to Supabase Realtime channel
+- [x] FastAPI broadcasts state updates to Supabase Realtime channel
 - [ ] Client subscribes to channel, renders state received from server
-- [ ] Never write draft state directly from client to DB
+      → **Phase 4 (Frontend)** — Next.js `useEffect` + `supabase.channel()` subscription
+- ~~Never write draft state directly from client to DB~~
+  → Architectural principle (D-001), not a task. Guaranteed by design: only FastAPI writes to the DB.
 
 ### Reconnection protocol (see DECISIONS.md D-001)
 
-- [ ] On reconnect: FastAPI sends full state snapshot (picks made, current pick, time remaining)
-- [ ] If manager reconnects during their turn with time remaining: they can pick
-- [ ] If timer expired during disconnection: autodraft pick is final
-- [ ] Document recovery procedure for FastAPI restart mid-draft
+- [x] On reconnect: FastAPI sends full state snapshot (picks made, current pick, time remaining)
+- [x] If manager reconnects during their turn with time remaining: they can pick
+- [x] If timer expired during disconnection: autodraft pick is final
+- [x] Document recovery procedure for FastAPI restart mid-draft
 
 ### Draft Assistée (fallback mode)
 
-- [ ] Commissioner UI: "Switch to Assisted Draft" button
-- [ ] Commissioner enters picks one by one, no timer
-- [ ] Audit log: each pick stamped with timestamp + "entered by commissioner"
-- [ ] Log visible to all managers
+- [x] Commissioner UI: "Switch to Assisted Draft" button
+- [x] Commissioner enters picks one by one, no timer
+- [x] Audit log: each pick stamped with timestamp + "entered by commissioner"
+- [x] Log visible to all managers
 
 ### Ghost team
 
-- [ ] Ghost team creation when manager count is odd or below competition minimum
-- [ ] Random name generator
-- [ ] Autodraft with default value algorithm
-- [ ] Ghost team excluded from waivers and trades
+- [x] Ghost team creation when manager count is odd or below competition minimum
+- [x] Random name generator
+- [x] Autodraft with default value algorithm
+- [x] Ghost team excluded from waivers and trades
 
 ### Tests (mandatory — PRs blocked if failing)
 
-- [ ] Snake order for 2, 3, 4, 5, 6 managers
-- [ ] Timer timeout → autodraft activation
-- [ ] Client reconnection during pick
-- [ ] Client reconnection after pick (timer expired)
-- [ ] Draft Assistée: picks logged correctly
-- [ ] Roster constraint validation (coverage minimums)
+- [x] Snake order for 2, 3, 4, 5, 6 managers
+- [x] Timer timeout → autodraft activation
+- [x] Client reconnection during pick
+- [x] Client reconnection after pick (timer expired)
+- [x] Draft Assistée: picks logged correctly
+- [x] Roster constraint validation (coverage minimums)
 
 ---
 
@@ -300,5 +302,5 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 ## Immediate next actions
 
 **→ Phase 0 (parallel):** await responses from Statscore and DSG.
-**→ Phase 2:** snake draft order algorithm — first step is the pure Python function, tested in isolation before any FastAPI integration.
+**→ Phase 2 (current):** Draft Assistée — commissioner fallback mode.
 **→ Phase 1 — remaining:** Cron Coolify config (after first deploy to Hetzner).

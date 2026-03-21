@@ -34,3 +34,71 @@ functions correctly.
 and verify all imports and the `matcher` export still work correctly.
 
 ---
+
+## BUG-003 — test_health.py fails without Supabase env vars + Settings mismatch
+
+**Discovered:** 2026-03-21
+**Status:** Open — non-blocking for Phase 2
+**Affects:** `backend/tests/test_health.py` (collection error)
+
+### Symptoms
+
+Running `pytest backend/` fails at collection with two distinct errors:
+
+1. `ValidationError` — required fields missing: `supabase_url`,
+   `supabase_anon_key`, `supabase_service_role_key`, `supabase_jwt_secret`,
+   `database_url`. pytest does not auto-load `.env` — these vars are absent
+   when running tests locally without explicit env injection.
+
+2. `extra_forbidden` — fields present in `.env` but removed from `Settings`:
+   `api_host`, `api_port`, `app_env`, `duckdb_path`. The `Settings` model
+   uses `model_config = {"extra": "forbid"}` — any unknown field crashes
+   at import time.
+
+### Root cause
+
+- `app/config.py` instantiates `settings = get_settings()` at **module level**
+  (line 111). Any import of `app.config` in a test triggers the full
+  `Settings()` constructor, which requires all env vars to be present.
+- `.env` contains variables that were removed from `Settings` at some point
+  but never cleaned up.
+
+### Fix (Phase 3 or before first deploy)
+
+Two independent fixes needed:
+
+1. **pytest env loading** — add `pytest-dotenv` or a `conftest.py` fixture
+   that loads `.env.test` before collection. This is the standard pattern
+   for FastAPI + pydantic-settings projects.
+
+2. **Settings / .env sync** — remove `api_host`, `api_port`, `app_env`,
+   `duckdb_path` from `.env` (or re-add them to `Settings` if they are
+   still needed).
+
+### Workaround
+
+Run draft tests directly — they do not import `app.config`:
+
+```bash
+pytest backend/tests/draft/ backend/tests/test_reconnection.py -v
+```
+
+## LIMITATION-001 — FastAPI restart mid-draft causes full state loss
+
+**Discovered:** 2026-03-21
+**Status:** Open — accepted for Phase 2, must be fixed before Phase 3 beta
+
+**Description:** DraftEngine state is in-memory only. A FastAPI restart
+(crash, deploy, OOM) during a live draft loses timer state, autodraft
+state, and connected manager set. Picks already recorded in `draft_picks`
+are safe.
+
+**Recovery:** Commissioner switches to Assisted Draft manually (CDC 7.5).
+Full procedure documented in DECISIONS.md D-028.
+
+**Blockers before fix:**
+
+- `drafts.manager_order` JSONB column missing from schema (migration needed)
+- `reconstruct_engine_from_db()` not yet implemented in `DraftRegistry`
+
+**Target:** Phase 3 — before first real draft.

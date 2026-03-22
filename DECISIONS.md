@@ -1177,3 +1177,39 @@ justified at this stage.
 - `.venv-airflow/` added to `.gitignore`.
 - `airflow/tests/requirements-test.txt` pins both `apache-airflow` and `pendulum`.
 - Migration to Airflow 3.x deferred to a future phase if needed.
+
+---
+
+## D-033 — Lock authority for weekly lineup: kick_off_time < NOW()
+
+**Date:** 2026-03-22
+**Status:** Accepted
+
+**Context:** Weekly lineups must be locked progressively per match, not globally
+per round (CDC 6.5). The question is what determines whether a player is locked:
+the `kick_off_time` timestamp or the `status` field on `real_matches`.
+
+**Options considered:**
+
+- A) Compare `real_matches.kick_off_time < NOW()` — pure timestamp comparison.
+- B) Use `real_matches.status = 'live'` — depends on the pipeline updating status.
+
+**Decision:** Option A — `kick_off_time < NOW()` is the lock authority.
+
+**Rationale:**
+
+- Independent of the pipeline: lock activates at the exact scheduled time
+  regardless of whether the post_match_pipeline has run yet.
+- No race condition: a pipeline delay cannot accidentally keep a player unlocked
+  past their kick_off.
+- `status` remains useful for display (showing "live" badge) but never for
+  access control decisions.
+
+**Consequences:**
+
+- `_fetch_kickoff_times()` in `LineupService` queries `real_matches.kick_off_time`
+  once per service call and maps club → datetime.
+- `locked_at` stored in `weekly_lineups` is set by the pipeline at kick_off,
+  not by the user submission.
+- If a kick_off_time is corrected after the fact (rare), locked_at in
+  weekly_lineups retains the original value — acceptable for V1.

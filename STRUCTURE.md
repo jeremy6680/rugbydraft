@@ -51,6 +51,7 @@ through FastAPI first, then are broadcast to clients.
 ```
 backend/
 ├── app/
+│   ├── dependencies.py    # Shared FastAPI deps: get_current_user_id, get_supabase_client
 │   ├── main.py            # FastAPI app entrypoint — mounts routers, middleware
 │   │                      # CORS + SlowAPI + AuthMiddleware assembled here
 │   ├── config.py          # App settings loaded from environment variables
@@ -62,20 +63,24 @@ backend/
 │   │                      # Public routes whitelisted in PUBLIC_PATHS
 │   ├── routers/
 │   │   ├── __init__.py
-│   │   └── health.py      # GET /health — liveness probe (public, no JWT)
+│   │   ├── health.py          # GET /health — liveness probe (public, no JWT)
+│   │   ├── lineup.py          # 4 endpoints: GET/PUT lineup, PATCH captain/kicker
 │   │   ├── draft.py           # POST /connect, POST /disconnect, GET /state
 │   │   └── draft_assisted.py  # POST /assisted/enable, POST /assisted/pick
 │   │                          # GET /assisted/log — commissioner-only (403 if not)
+│   ├── services/
+│   │   └── lineup_service.py  # Business logic: lock validation, IR exclusion, multi-position, CDC 6.6 edge cases
 │   ├── schemas/
 │   │ ├── **init**.py
-│   │ └── draft.py # Pydantic response models for draft endpoints (D-025)
-│   │ # DraftStateSnapshotResponse, PickRecordResponse
-│   │ # Mirrors internal DraftStateSnapshot dataclass
-│   └── models/            # Pydantic models — to be completed in Phase 2
+│   │ └── draft.py             # Pydantic response models for draft endpoints (D-025)
+│   │                          # DraftStateSnapshotResponse, PickRecordResponse
+│   │                          # Mirrors internal DraftStateSnapshot dataclass
+│   └── models/                # Pydantic models — to be completed in Phase 2
 │       ├── __init__.py
 │       ├── user.py
 │       ├── player.py
-│       └── league.py
+│       ├── league.py
+│       └── lineup.py        # Pydantic models: LineupSubmission, LineupResponse, CaptainUpdate, KickerUpdate
 ├── draft/
 │   ├── __init__.py          # Draft engine package marker
 │   ├── snake_order.py       # Pure snake draft order algorithm (no I/O)
@@ -121,6 +126,7 @@ backend/
 ├── tests/
 │   ├── __init__.py
 │   ├── test_health.py       # 8 tests — health endpoint + auth middleware
+│   ├── test_lineup.py       # 14 tests: Pydantic, lock, IR, multi-position, captain/kicker CDC 6.6
 │   ├── test_reconnection.py # 4 tests — reconnection protocol (D-025)
 │   │                        # reconnect during own turn, after timer expired,
 │   │                        # while other manager picks, GET state no side effects

@@ -192,16 +192,16 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ### Weekly lineup management
 
-- [ ] Starter/bench/IR slot management API
-- [ ] Progressive lock: per-match, not per-round (locked at kick-off of player's team match)
-- [ ] Lock validation: cannot change captain/kicker after their team's kick-off
-- [ ] Multi-position player: position choice locked at kick-off
+- [x] Starter/bench/IR slot management API
+- [x] Progressive lock: per-match, not per-round (locked at kick-off of player's team match)
+- [x] Lock validation: cannot change captain/kicker after their team's kick-off
+- [x] Multi-position player: position choice locked at kick-off
 
 ### Edge cases (from CDC section 6.6)
 
-- [ ] Player plays two matches in same round → only first match counts
-- [ ] Captain change between two matches in same round → allowed until captain's team kick-off
-- [ ] Kicker change after first match → blocked until next round
+- [x] Player plays two matches in same round → only first match counts
+- [x] Captain change between two matches in same round → allowed until captain's team kick-off
+- [x] Kicker change after first match → blocked until next round
 
 ### Waivers
 
@@ -227,8 +227,8 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ### Tests
 
-- [ ] Fantasy points calculation: captain multiplier, kicker-only stats, COALESCE
-- [ ] Edge case: double match in same round
+- [x] Fantasy points calculation: captain multiplier, kicker-only stats, COALESCE
+- [x] Edge case: double match in same round
 - [ ] Waiver priority ordering
 - [ ] Waiver block: IR player not reintegrated
 - [ ] Trade window enforcement (mid-season cutoff)
@@ -314,5 +314,5 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 ## Immediate next actions
 
 **→ Phase 0 (parallel):** await responses from Statscore and DSG.
-**→ Phase 3 (current):** Airflow DAG `post_match_pipeline` — detect → ingest → bronze+silver (DuckDB) → export_silver_to_pg → gold (PostgreSQL) → atomic commit.
+**→ Phase 3 (current):** Waivers — waiver window, priority ordering, IR blocking rule.
 **→ Phase 1 — remaining:** Cron Coolify config (after first deploy to Hetzner).

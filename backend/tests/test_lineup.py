@@ -47,7 +47,7 @@ PLAYER_ALLDRITT = uuid4()  # number_8, La Rochelle — match at 17:00 (future)
 PLAYER_PENAUD = uuid4()  # wing, Toulouse — same match as Dupont (past)
 PLAYER_RAMOS = uuid4()  # multi-position: fly-half OR fullback, Toulouse
 
-NOW = datetime(2026, 3, 22, 16, 0, 0, tzinfo=timezone.utc)  # 16:00 UTC
+NOW = datetime(2030, 1, 1, 16, 0, 0, tzinfo=timezone.utc)
 PAST_KICKOFF = NOW - timedelta(hours=1)  # 15:00 — Toulouse match already started
 FUTURE_KICKOFF = NOW + timedelta(hours=1)  # 17:00 — La Rochelle not yet started
 

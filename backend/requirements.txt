@@ -24,3 +24,6 @@ slowapi==0.1.9
 
 # ── Supabase SDK — Auth + Realtime (Phase 2) ─────────────────────────────────
 supabase==2.15.1
+
+# ── APScheduler ────────────────────────────────────────────────────────────
+apscheduler==3.10.4

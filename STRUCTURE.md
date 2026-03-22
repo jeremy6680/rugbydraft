@@ -70,6 +70,8 @@ backend/
 │   │   │                      # POST /{id}/accept, POST /{id}/reject,
 │   │   │                      # POST /{id}/cancel, POST /{id}/veto,
 │   │   │                      # POST /complete-expired (cron internal)
+│   │   ├── infirmary.py       # 3 endpoints: PUT /ir/place, PUT /ir/reintegrate,
+│   │   │                      # GET /ir/alerts — IR slot management (CDC §6.4)
 │   │   ├── waivers.py         # 4 endpoints: POST/GET claims, DELETE cancel, POST process
 │   │   ├── draft.py           # POST /connect, POST /disconnect, GET /state
 │   │   └── draft_assisted.py  # POST /assisted/enable, POST /assisted/pick
@@ -148,6 +150,18 @@ backend/
 │                            # propose_trade(), accept_trade(), reject_trade()
 │                            # cancel_trade(), commissioner_veto(), complete_trade()
 │                            # VETO_WINDOW_HOURS = 24
+├── infirmary/
+│   ├── __init__.py          # Infirmary package marker
+│   ├── ir_rules.py          # Pure infirmary business rules (CDC §6.4)
+│   │                        # IRSlotSnapshot, validate_ir_placement,
+│   │                        # validate_ir_reintegration, get_overdue_ir_slots
+│   │                        # Constants: MAX_IR_SLOTS=3, IR_REINTEGRATION_DEADLINE_DAYS=7
+│   │                        # Exceptions: IRCapacityError, IRPlayerAlreadyInIRError,
+│   │                        # IRPlayerNotRecoveredError
+│   └── ir_scheduler.py      # APScheduler daily job (09:00 UTC)
+│                            # run_ir_recovery_scan(): detect recoveries,
+│                            # write ir_recovery_deadline, broadcast Realtime alert
+│                            # register_ir_jobs(): called from FastAPI lifespan
 ├── waivers/
 │   ├── __init__.py          # Waiver system package marker
 │   ├── window.py            # Pure: waiver window open/closed (Tue 07:00 → Wed 23:59:59)
@@ -241,11 +255,13 @@ will be added in Phase 3 once the provider is confirmed (D-012).
 
 Database migrations and tests.
 
-| File                                  | Description                                                                                                                                              |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `migrations/001_initial_schema.sql`   | Full PostgreSQL schema: 21 tables, enums, RLS policies, GRANT statements, indexes, triggers.                                                             |
-| `migrations/002_phase3_additions.sql` | Phase 3 tables: `weekly_lineups`, `waivers`, `trades`, `trade_players`, `fantasy_scores_staging`. Column: `drafts.manager_order`. RLS on all new tables. |
-| `migrations/003_add_external_ids.sql` | `players.external_id` and `real_matches.external_id` — bridge between silver pipeline IDs and PostgreSQL UUIDs (D-031).                                  |
+| File                                      | Description                                                                                                                                              |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `migrations/001_initial_schema.sql`       | Full PostgreSQL schema: 21 tables, enums, RLS policies, GRANT statements, indexes, triggers.                                                             |
+| `migrations/002_phase3_additions.sql`     | Phase 3 tables: `weekly_lineups`, `waivers`, `trades`, `trade_players`, `fantasy_scores_staging`. Column: `drafts.manager_order`. RLS on all new tables. |
+| `migrations/003_add_external_ids.sql`     | `players.external_id` and `real_matches.external_id` — bridge between silver pipeline IDs and PostgreSQL UUIDs (D-031).                                  |
+| `migrations/004_add_trade_fields.sql`     | Phase 3 — trade fields additions.                                                                                                                        |
+| `migrations/005_ir_recovery_deadline.sql` | Phase 3 — `ir_recovery_deadline` column on `weekly_lineups`. Index on non-null deadlines.                                                                |
 
 Migrations are plain SQL files, applied manually via the Supabase SQL
 editor or psql. No ORM migration tool in V1 — keep it simple and explicit.

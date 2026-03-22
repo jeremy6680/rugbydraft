@@ -130,6 +130,20 @@ Phase 4 alongside KB-004 (waiver atomic fix).
 
 ---
 
+## KB-007 — IR endpoints have no integration tests
+
+**Status:** Known / acceptable for V1
+**Affects:** `app/routers/infirmary.py` — PUT /ir/place, PUT /ir/reintegrate, GET /ir/alerts
+
+The three infirmary endpoints are covered by unit tests on the pure rules
+(test_infirmary.py, 26 tests) but have no integration tests mocking the
+Supabase client. Manual testing was not performed due to missing seed data.
+
+**Fix:** Add integration tests with a mocked AsyncClient before Phase 4.
+Same pattern as KB-004 and KB-006.
+
+---
+
 ## LIMITATION-001 — FastAPI restart mid-draft causes full state loss
 
 **Discovered:** 2026-03-21

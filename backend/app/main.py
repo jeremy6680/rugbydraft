@@ -23,8 +23,20 @@ from app.config import settings
 from app.middleware.auth import AuthMiddleware
 from app.routers import draft, draft_assisted, health, trades, waivers
 from app.routers.lineup import router as lineup_router
+from app.routers.infirmary import router as infirmary_router
 
 from draft.registry import DraftRegistry
+from infirmary.ir_scheduler import get_scheduler, register_ir_jobs
+
+from supabase._async.client import AsyncClient
+from supabase import acreate_client
+
+# ── Supabase client — module-level instance for scheduler ─────────────────────
+# Injected into APScheduler jobs at startup.
+# Request-scoped client (get_supabase_client) is used by routers instead.
+import logging
+
+supabase_client: AsyncClient | None = None
 
 # ── Rate limiter setup ────────────────────────────────────────────────────────
 # Uses the client IP address as the rate limit key.
@@ -32,6 +44,11 @@ from draft.registry import DraftRegistry
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=[f"{settings.rate_limit_per_minute}/minute"],
+)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s:     %(name)s — %(message)s",
 )
 
 
@@ -52,11 +69,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
           in-memory only and do not require graceful teardown in V1.
           (In production, consider persisting draft state to DB on shutdown.)
     """
+    global supabase_client
+
     # Startup
     app.state.draft_registry = DraftRegistry()
 
-    yield  # application runs here
+    # Supabase async client for scheduler (not request-scoped)
+    supabase_client = await acreate_client(
+        settings.supabase_url,
+        settings.supabase_service_role_key,  # service role — scheduler bypasses RLS
+    )
 
+    scheduler = get_scheduler()
+    register_ir_jobs(scheduler, supabase_client)
+    scheduler.start()
+    yield  # application runs here
+    # Shutdown
+    if scheduler.running:
+        scheduler.shutdown()
     # Shutdown (placeholder — no cleanup needed in V1)
 
 
@@ -101,9 +131,10 @@ app.add_middleware(AuthMiddleware)
 app.include_router(health.router)
 app.include_router(draft.router)
 app.include_router(draft_assisted.router)
-app.include_router(lineup_router)
 app.include_router(trades.router)
 app.include_router(waivers.router)
+app.include_router(lineup_router)
+app.include_router(infirmary_router)
 
 
 # Phase 3: app.include_router(players.router, prefix="/players")

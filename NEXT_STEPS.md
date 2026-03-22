@@ -222,10 +222,10 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ### Infirmary rules
 
-- [ ] IR slot capacity: 3 players max
-- [ ] Auto-notification on recovery / suspension end
-- [ ] 1-week reintegration deadline before waiver/trade blocking activates
-- [ ] Alert on dashboard: "Player X recovered — reintegrate within X days"
+- [x] IR slot capacity: 3 players max
+- [x] Auto-notification on recovery / suspension end
+- [x] 1-week reintegration deadline before waiver/trade blocking activates
+- [x] Alert on dashboard: "Player X recovered — reintegrate within X days"
 
 ### Tests
 

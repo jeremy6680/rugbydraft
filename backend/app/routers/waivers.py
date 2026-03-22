@@ -177,7 +177,7 @@ async def list_waiver_claims(
 
 @router.delete(
     "/{waiver_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=status.HTTP_200_OK,
     summary="Cancel a pending waiver claim",
 )
 async def cancel_waiver_claim(

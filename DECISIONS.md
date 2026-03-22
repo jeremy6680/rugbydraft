@@ -1031,3 +1031,122 @@ implementation is a Phase 3 prerequisite before first real draft.
 - The `TODO` in `DraftRegistry` marks the reconstruction hook point.
 - CI test required in Phase 3: simulate restart at pick N, reconstruct,
   verify remaining picks complete correctly.
+
+---
+
+---
+
+---
+
+## D-030 — dbt dual-target: DuckDB (ci) + PostgreSQL (prod)
+
+**Date:** 2026-03-22
+**Status:** Accepted
+
+**Context:** Gold models need to join dbt silver models with PostgreSQL
+application tables (`weekly_lineups`, `rosters`, `league_members`, etc.).
+Bronze models use `read_json_auto()` — a DuckDB-only function. Running
+bronze or silver on PostgreSQL is structurally impossible.
+
+**Options considered:**
+
+- A) All layers on PostgreSQL in prod. DuckDB for dev/CI only.
+- B) DuckDB for bronze+silver, Python export DuckDB→PG, gold on PostgreSQL.
+- C) DuckDB `postgres_scanner` extension (experimental, unreliable in 1.x).
+
+**Decision:** Option B — DuckDB for bronze+silver, PostgreSQL for gold,
+with `scripts/export_silver_to_pg.py` as the bridge.
+
+**Rationale:**
+
+- Option A is impossible: `read_json_auto()` is DuckDB-only. Bronze models
+  cannot run on PostgreSQL.
+- Option C is experimental and has known issues on complex joins and NUMERIC
+  types in DuckDB 1.x. Rejected for production use.
+- Option B is the correct split: DuckDB for what it's good at (reading
+  connector JSON files efficiently), PostgreSQL for what it's good at
+  (joining application state with scoring data).
+
+**Implementation:**
+
+- `profiles.yml` has two outputs:
+  - `ci` (default): DuckDB — runs bronze + silver. No Supabase needed.
+  - `prod`: PostgreSQL (Supabase) — runs gold only.
+- `scripts/export_silver_to_pg.py`: reads the 5 silver tables from DuckDB,
+  writes them to PostgreSQL as `pipeline_stg_*` tables. Runs between the
+  dbt silver step and the dbt gold step in the Airflow DAG.
+- Gold models use `{{ source('postgres', 'pipeline_stg_*') }}` for silver
+  data and `{{ source('postgres', '...') }}` for application tables.
+
+**Airflow DAG sequence (post_match_pipeline):**
+
+```
+1. ingest               → JSON in data/raw/          (Python)
+2. dbt run --target ci  → bronze + silver in DuckDB  (dbt)
+3. export_silver_to_pg  → pipeline_stg_* in PG       (Python)
+4. dbt run --target prod --select gold → gold in PG  (dbt)
+5. atomic commit        → staging → fantasy_scores   (Python)
+```
+
+**CI sequence (GitHub Actions, no Supabase):**
+
+```
+dbt run --target ci --select bronze silver
+dbt test --target ci --select bronze silver
+```
+
+Gold models excluded from CI — they require a live Supabase connection.
+
+**Consequences:**
+
+- `profiles.yml.example` updated with `ci` and `prod` targets.
+- `dbt_project/models/sources.yml` declares all PostgreSQL sources.
+- `dbt-postgres` added to `dbt_project/requirements.txt`.
+- `scripts/export_silver_to_pg.py` is a required step in the Airflow DAG.
+- The 5 `pipeline_stg_*` tables in PostgreSQL are disposable —
+  they are fully replaced on every pipeline run.
+
+---
+
+## D-031 — external_id columns on players and real_matches
+
+**Date:** 2026-03-22
+**Status:** Accepted
+
+**Context:** Silver models identify players and matches via `external_id`
+strings from the data provider (e.g. `player_external_id`, `match_external_id`).
+PostgreSQL application tables use UUIDs (`players.id`, `real_matches.id`).
+Gold models need to join these two worlds — there was no bridge column.
+
+**Decision:** Add `external_id TEXT` to `players` and `real_matches`.
+Populated by the connector ingestion script when creating/updating records.
+
+**Migration:** `db/migrations/003_add_external_ids.sql`
+
+```sql
+ALTER TABLE players     ADD COLUMN IF NOT EXISTS external_id TEXT;
+ALTER TABLE real_matches ADD COLUMN IF NOT EXISTS external_id TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_players_external_id
+    ON players (external_id) WHERE external_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_real_matches_external_id
+    ON real_matches (external_id) WHERE external_id IS NOT NULL;
+```
+
+**Join pattern in gold models:**
+
+```sql
+inner join players p
+    on p.external_id = pipeline_stg_players.player_external_id
+inner join real_matches rm
+    on rm.external_id = pipeline_stg_matches.match_external_id
+```
+
+**Consequences:**
+
+- Connector implementations must set `external_id` when upserting players
+  and matches. The mock connector must be updated to include external IDs
+  in fixture data.
+- `external_id` is nullable (INDEX WHERE NOT NULL) — existing rows without
+  a provider ID are not affected.
+- The silver export script (`export_silver_to_pg.py`) does not need to
+  change — it exports the full silver tables as-is.

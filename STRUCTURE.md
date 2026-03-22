@@ -202,10 +202,11 @@ will be added in Phase 3 once the provider is confirmed (D-012).
 
 Database migrations and tests.
 
-| File                                | Description                                                                                  |
-| ----------------------------------- | -------------------------------------------------------------------------------------------- |
-| `migrations/001_initial_schema.sql` | Full PostgreSQL schema: 21 tables, enums, RLS policies, GRANT statements, indexes, triggers. |
-| `tests/test_rls_policies.sql`       | Manual RLS validation tests. Run in Supabase SQL Editor. Covers 7 isolation scenarios.       |
+| File                                  | Description                                                                                                                                              |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `migrations/001_initial_schema.sql`   | Full PostgreSQL schema: 21 tables, enums, RLS policies, GRANT statements, indexes, triggers.                                                             |
+| `migrations/002_phase3_additions.sql` | Phase 3 tables: `weekly_lineups`, `waivers`, `trades`, `trade_players`, `fantasy_scores_staging`. Column: `drafts.manager_order`. RLS on all new tables. |
+| `migrations/003_add_external_ids.sql` | `players.external_id` and `real_matches.external_id` — bridge between silver pipeline IDs and PostgreSQL UUIDs (D-031).                                  |
 
 Migrations are plain SQL files, applied manually via the Supabase SQL
 editor or psql. No ORM migration tool in V1 — keep it simple and explicit.
@@ -219,23 +220,33 @@ dbt Core data pipeline. Medallion architecture: bronze → silver → gold.
 ```
 dbt_project/
 ├── models/
-│   ├── bronze/            # Raw data as ingested — no transformation, views
+│   ├── sources.yml                     # All PostgreSQL tables used as sources in gold models.
+│   │                                   # Two categories: application tables (FastAPI) and
+│   │                                   # pipeline staging tables (pipeline_stg_* from export script).
+│   ├── bronze/                         # Raw data as ingested — no transformation, views
 │   │   ├── raw_matches.sql             # Completed match results
 │   │   ├── raw_player_stats.sql        # Individual player stats per match
 │   │   ├── raw_fixtures.sql            # Upcoming and recent fixtures
 │   │   └── raw_player_availability.sql # Player injury/suspension status
-│   └── silver/            # Cleaned, typed, validated data — tables
-│       ├── stg_players.sql             # Player reference data
-│       ├── stg_matches.sql             # Finished matches only
-│       ├── stg_match_stats.sql         # Stats with COALESCE on conditional fields
-│       ├── stg_fixtures.sql            # All fixtures, canonical column names
-│       └── stg_player_availability.sql # Availability with typed fields
-│   # gold/ — added in Phase 3 (fantasy points, leaderboard, player value)
-├── tests/                 # dbt schema tests (not_null, unique, accepted_values)
-├── models/schema.yml      # Test definitions for bronze and silver layers
-├── dbt_project.yml        # dbt project configuration
-├── profiles.yml.example   # Connection profile template (never commit profiles.yml)
-├── requirements.txt           # Pipeline dependencies — dbt-duckdb (pinned)
+│   ├── silver/                         # Cleaned, typed, validated data — tables
+│   │   ├── stg_players.sql             # Player reference data
+│   │   ├── stg_matches.sql             # Finished matches only
+│   │   ├── stg_match_stats.sql         # Stats with COALESCE on conditional fields
+│   │   ├── stg_fixtures.sql            # All fixtures, canonical column names
+│   │   └── stg_player_availability.sql # Availability with typed fields
+│   └── gold/                           # Fantasy points, leaderboard, player value — tables
+│       ├── _gold_models.yml            # Schema tests for all gold models
+│       ├── mart_fantasy_points.sql     # Points per starter per round (full CDC scoring)
+│       ├── mart_roster_scores.sql      # Aggregate points per roster per round
+│       ├── mart_leaderboard.sql        # League standings with DENSE_RANK + tiebreakers
+│       ├── mart_player_pool.sql        # Player availability per league (free/drafted/injured)
+│       └── mart_player_value.sql       # Default value score for autodraft + ghost team
+├── tests/                              # dbt schema tests (not_null, unique, accepted_values)
+├── models/schema.yml                   # Test definitions for bronze and silver layers
+├── dbt_project.yml                     # dbt project configuration
+├── profiles.yml.example                # Dual-target: ci (DuckDB, dev/CI) + prod (PostgreSQL/Supabase, Airflow)
+│                                       # See D-030. Copy to profiles.yml and fill SUPABASE_DB_* vars.
+├── requirements.txt                    # Pipeline dependencies — dbt-duckdb (pinned)
 
 ```
 
@@ -273,9 +284,10 @@ here — it is confidential and must never appear in the public repo.
 
 Utility scripts. Not part of the application — run manually or in CI.
 
-| File              | Purpose                                                                    |
-| ----------------- | -------------------------------------------------------------------------- |
-| `validate_api.py` | Phase 0 — tests a rugby data provider against the required stats checklist |
+| File                     | Purpose                                                                                                                                                                                                     |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `validate_api.py`        | Phase 0 — tests a rugby data provider against the required stats checklist                                                                                                                                  |
+| `export_silver_to_pg.py` | Phase 3 — exports dbt silver tables from DuckDB to PostgreSQL as `pipeline_stg_*` tables. Bridge step between dbt silver (DuckDB) and dbt gold (PostgreSQL). Runs as step 3 of Airflow post_match_pipeline. |
 
 ---
 

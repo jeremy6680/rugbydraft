@@ -4,3 +4,4 @@
 
 # dbt-duckdb includes dbt-core as a transitive dependency
 dbt-duckdb==1.9.2
+dbt-utils>=1.1,<2.0

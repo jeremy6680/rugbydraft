@@ -1,7 +1,7 @@
 # NEXT_STEPS.md — RugbyDraft
 
-> Current status: Phase 2 in progress — Draft Assistée complete. Ghost team next.
-> Last updated: 2026-03-20
+> Current status: Phase 3 in progress — Gold pipeline complete. Airflow DAG next.
+> Last updated: 2026-03-22
 
 ---
 
@@ -101,7 +101,7 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ---
 
-## 🔴 Phase 2 — Draft Engine (next)
+## ✅ Phase 2 — Draft Engine (complete)
 
 **Estimated duration:** 3–4 weeks
 **Prerequisite:** Phase 1 complete ✅, PostgreSQL schema live ✅.
@@ -155,21 +155,33 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ---
 
-## Phase 3 — Gameplay
+## 🟡 Phase 3 — Gameplay (in progress)
 
 **Estimated duration:** 2–3 weeks
 **Prerequisite:** Phase 2 complete + data provider confirmed (D-012).
 
+### Database migrations
+
+- [x] Migration 002: `weekly_lineups`, `waivers`, `trades`, `trade_players`,
+      `fantasy_scores_staging`, `drafts.manager_order` — all with RLS + indexes
+- [x] Migration 003: `players.external_id`, `real_matches.external_id`
+      — bridge between silver pipeline IDs and PostgreSQL UUIDs (D-031)
+- [x] `weekly_lineups.slot_type` column added (ALTER TABLE — was missing from 001)
+
 ### Data pipeline — Gold
 
-- [ ] `mart_fantasy_points`: scoring logic per player per round
-  - Captain ×1.5 (rounded up to nearest 0.5)
-  - Kicker stats only for designated kicker
-  - `COALESCE(stat, 0)` for all conditional stats
-- [ ] `mart_roster_scores`: aggregate points per roster per round
-- [ ] `mart_leaderboard`: standings per league
-- [ ] `mart_player_pool`: available players per league
-- [ ] `mart_player_value`: default value score for autodraft
+- [x] Dual-target dbt architecture: DuckDB (ci) + PostgreSQL (prod) — D-030
+- [x] `scripts/export_silver_to_pg.py` — DuckDB → PostgreSQL bridge for gold models
+- [x] `dbt_project/models/sources.yml` — all PostgreSQL sources declared
+- [x] `mart_fantasy_points`: full CDC scoring — captain ×1.5 (nearest 0.5),
+      kicker-only stats, COALESCE on all stats, double-match dedup via
+      `is_first_match_of_round` (CDC 6.6)
+- [x] `mart_roster_scores`: aggregate points per roster per round
+- [x] `mart_leaderboard`: standings with wins/losses, DENSE_RANK, tiebreaker
+- [x] `mart_player_pool`: free/drafted/injured/suspended status per league
+- [x] `mart_player_value`: default value score for autodraft (recency-weighted)
+- [x] `dbt run --target prod --select gold` passes — 5/5 models ✅
+- [ ] `dbt test --target prod --select gold` — run after seeding real data
 
 ### Airflow — post_match_pipeline
 
@@ -302,5 +314,5 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 ## Immediate next actions
 
 **→ Phase 0 (parallel):** await responses from Statscore and DSG.
-**→ Phase 2 (current):** Draft Assistée — commissioner fallback mode.
+**→ Phase 3 (current):** Airflow DAG `post_match_pipeline` — detect → ingest → bronze+silver (DuckDB) → export_silver_to_pg → gold (PostgreSQL) → atomic commit.
 **→ Phase 1 — remaining:** Cron Coolify config (after first deploy to Hetzner).

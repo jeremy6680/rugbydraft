@@ -514,15 +514,18 @@ class TestMultiPosition:
     async def test_valid_position_for_multiposition_player_passes(self) -> None:
         """Thomas Ramos playing fullback is valid."""
         slots = make_roster_slots()
-        # All clubs set to La Rochelle to avoid lock
-        for slot in slots:
-            slot["players"]["club"] = "La Rochelle"
 
-        starters = [s for s in slots if s["slot_type"] == "starter"][:15]
+        # Patch all clubs to La Rochelle (FUTURE_KICKOFF) at the slot level
+        # so the lock check sees no locked players.
+        slots_la_rochelle = [
+            {**slot, "players": {**slot["players"], "club": "La Rochelle"}}
+            for slot in slots
+        ]
+
+        starters = [s for s in slots_la_rochelle if s["slot_type"] == "starter"][:15]
         starter_inputs = [
             LineupPlayerInput(
                 player_id=UUID(s["player_id"]),
-                # Ramos plays fullback (his second valid position)
                 position="fullback"
                 if s["player_id"] == str(PLAYER_RAMOS)
                 else s["players"]["positions"][0],
@@ -540,7 +543,9 @@ class TestMultiPosition:
         with (
             patch.object(service, "_assert_ownership", new=AsyncMock()),
             patch.object(
-                service, "_fetch_roster_slots", new=AsyncMock(return_value=slots)
+                service,
+                "_fetch_roster_slots",
+                new=AsyncMock(return_value=slots_la_rochelle),
             ),
             patch.object(
                 service,

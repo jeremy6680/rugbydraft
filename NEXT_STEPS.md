@@ -234,7 +234,15 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 - [x] Waiver priority ordering
 - [x] Waiver block: IR player not reintegrated
 - [x] Trade window enforcement (mid-season cutoff)
+
+---
+
+### Deferred integration tests (Phase 4)
+
 - [ ] Atomic commit: simulate pipeline failure mid-run, verify production data unchanged
+- [ ] IR endpoints: integration tests with mocked AsyncClient (KB-007)
+- [ ] Waiver apply: atomic write test (KB-004)
+- [ ] Trade apply: atomic write test (KB-006)
 
 ---
 

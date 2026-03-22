@@ -83,6 +83,12 @@ class Settings(BaseSettings):
         description="Maximum requests per minute per IP (CDC spec).",
     )
 
+    # ── Waiver scheduler ──────────────────────────────────────────────────────
+    waiver_scheduler_secret: str = Field(
+        ...,
+        description="Shared secret for the waiver cycle scheduler endpoint.",
+    )
+
     @field_validator("rugby_data_source")
     @classmethod
     def validate_data_source(cls, value: str) -> str:

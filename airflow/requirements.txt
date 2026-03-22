@@ -1,0 +1,21 @@
+# airflow/requirements.txt
+# Dependencies added on top of apache/airflow:2.7.2 base image.
+# Install via Dockerfile: pip install --no-cache-dir --user -r /tmp/airflow-requirements.txt
+# All dbt versions must match dbt_project/requirements.txt exactly.
+
+# Airflow extra providers
+apache-airflow-providers-postgres==5.7.1
+
+# dbt stack — versions aligned with dbt_project/requirements.txt
+dbt-duckdb==1.9.2
+dbt-postgres==1.9.1
+dbt-utils>=1.1,<2.0
+
+# DuckDB standalone (used by export_silver_to_pg.py)
+duckdb==0.10.3
+
+# PostgreSQL driver (psycopg2 without build deps — binary wheel)
+psycopg2-binary==2.9.9
+
+# HTTP client — used by notify_scores_ready task
+httpx==0.27.0

@@ -68,8 +68,9 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values:
-                ["scheduled", "live", "finished", "postponed", "cancelled"]
+              config:
+                values:
+                  ["scheduled", "live", "finished", "postponed", "cancelled"]
 
   - name: stg_matches
     description: "Cleaned completed match results — finished matches only"
@@ -82,7 +83,8 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ["finished"]
+              config:
+                values: ["finished"]
 
   - name: stg_players
     description: "Player reference data extracted from match stats"
@@ -119,4 +121,6 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ["fit", "injured", "suspended", "doubtful", "unavailable"]
+              config:
+                values:
+                  ["fit", "injured", "suspended", "doubtful", "unavailable"]

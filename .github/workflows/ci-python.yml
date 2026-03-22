@@ -102,6 +102,7 @@ jobs:
       SUPABASE_JWT_SECRET: "mock-jwt-secret-32-chars-minimum-x"
       # Required by config.py — not used by any test in Phase 1
       DATABASE_URL: "postgresql+asyncpg://mock:mock@localhost:5432/mockdb"
+      WAIVER_SCHEDULER_SECRET: ${{ secrets.WAIVER_SCHEDULER_SECRET }}
       RUGBY_DATA_SOURCE: "mock"
 
     steps:

@@ -83,6 +83,67 @@ Run draft tests directly — they do not import `app.config`:
 pytest backend/tests/draft/ backend/tests/test_reconnection.py -v
 ```
 
+---
+
+## KB-004 — Waiver cycle: roster writes are not atomic (no PostgreSQL transaction)
+
+**Status:** Known / acceptable for V1
+**Affects:** `waiver_service._apply_granted_claim()`
+
+Three sequential Supabase writes (delete drop_player, insert add_player,
+update waiver status) are not wrapped in a single PostgreSQL transaction.
+A failure between writes would leave the roster in an inconsistent state.
+
+**Fix:** Implement a PostgreSQL RPC function `apply_granted_waiver(waiver_id)`
+that wraps all three writes in a single transaction. Deferred to Phase 4
+when DB RPC functions are introduced.
+
+---
+
+## KB-005 — `_player_is_free` does not filter by league_id correctly
+
+**Status:** Known / acceptable for V1
+**Affects:** `waiver_service._player_is_free()`
+
+The current implementation queries `roster_slots` without joining through
+`rosters` to filter by `league_id`. A player could be flagged as "not free"
+if they appear in a roster of a different league.
+
+**Fix:** Replace with a Supabase RPC call or a raw SQL query that joins
+`roster_slots → rosters` and filters on `rosters.league_id`. Deferred to
+Phase 4.
+
+---
+
+## KB-006 — \_apply_completed_trade() is not atomic
+
+**Status:** Known / acceptable for V1
+**Affects:** `trade_service._apply_completed_trade()`
+
+Multiple sequential Supabase writes (one per player entry) are not wrapped
+in a single PostgreSQL transaction. A failure mid-way would leave some
+players transferred and others not.
+
+**Fix:** Implement a PostgreSQL RPC function `apply_completed_trade(trade_id)`
+that wraps all roster_slots updates in a single transaction. Deferred to
+Phase 4 alongside KB-004 (waiver atomic fix).
+
+---
+
+## KB-007 — IR endpoints have no integration tests
+
+**Status:** Known / acceptable for V1
+**Affects:** `app/routers/infirmary.py` — PUT /ir/place, PUT /ir/reintegrate, GET /ir/alerts
+
+The three infirmary endpoints are covered by unit tests on the pure rules
+(test_infirmary.py, 26 tests) but have no integration tests mocking the
+Supabase client. Manual testing was not performed due to missing seed data.
+
+**Fix:** Add integration tests with a mocked AsyncClient before Phase 4.
+Same pattern as KB-004 and KB-006.
+
+---
+
 ## LIMITATION-001 — FastAPI restart mid-draft causes full state loss
 
 **Discovered:** 2026-03-21

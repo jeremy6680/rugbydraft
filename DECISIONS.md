@@ -1031,3 +1031,258 @@ implementation is a Phase 3 prerequisite before first real draft.
 - The `TODO` in `DraftRegistry` marks the reconstruction hook point.
 - CI test required in Phase 3: simulate restart at pick N, reconstruct,
   verify remaining picks complete correctly.
+
+---
+
+---
+
+---
+
+## D-030 — dbt dual-target: DuckDB (ci) + PostgreSQL (prod)
+
+**Date:** 2026-03-22
+**Status:** Accepted
+
+**Context:** Gold models need to join dbt silver models with PostgreSQL
+application tables (`weekly_lineups`, `rosters`, `league_members`, etc.).
+Bronze models use `read_json_auto()` — a DuckDB-only function. Running
+bronze or silver on PostgreSQL is structurally impossible.
+
+**Options considered:**
+
+- A) All layers on PostgreSQL in prod. DuckDB for dev/CI only.
+- B) DuckDB for bronze+silver, Python export DuckDB→PG, gold on PostgreSQL.
+- C) DuckDB `postgres_scanner` extension (experimental, unreliable in 1.x).
+
+**Decision:** Option B — DuckDB for bronze+silver, PostgreSQL for gold,
+with `scripts/export_silver_to_pg.py` as the bridge.
+
+**Rationale:**
+
+- Option A is impossible: `read_json_auto()` is DuckDB-only. Bronze models
+  cannot run on PostgreSQL.
+- Option C is experimental and has known issues on complex joins and NUMERIC
+  types in DuckDB 1.x. Rejected for production use.
+- Option B is the correct split: DuckDB for what it's good at (reading
+  connector JSON files efficiently), PostgreSQL for what it's good at
+  (joining application state with scoring data).
+
+**Implementation:**
+
+- `profiles.yml` has two outputs:
+  - `ci` (default): DuckDB — runs bronze + silver. No Supabase needed.
+  - `prod`: PostgreSQL (Supabase) — runs gold only.
+- `scripts/export_silver_to_pg.py`: reads the 5 silver tables from DuckDB,
+  writes them to PostgreSQL as `pipeline_stg_*` tables. Runs between the
+  dbt silver step and the dbt gold step in the Airflow DAG.
+- Gold models use `{{ source('postgres', 'pipeline_stg_*') }}` for silver
+  data and `{{ source('postgres', '...') }}` for application tables.
+
+**Airflow DAG sequence (post_match_pipeline):**
+
+```
+1. ingest               → JSON in data/raw/          (Python)
+2. dbt run --target ci  → bronze + silver in DuckDB  (dbt)
+3. export_silver_to_pg  → pipeline_stg_* in PG       (Python)
+4. dbt run --target prod --select gold → gold in PG  (dbt)
+5. atomic commit        → staging → fantasy_scores   (Python)
+```
+
+**CI sequence (GitHub Actions, no Supabase):**
+
+```
+dbt run --target ci --select bronze silver
+dbt test --target ci --select bronze silver
+```
+
+Gold models excluded from CI — they require a live Supabase connection.
+
+**Consequences:**
+
+- `profiles.yml.example` updated with `ci` and `prod` targets.
+- `dbt_project/models/sources.yml` declares all PostgreSQL sources.
+- `dbt-postgres` added to `dbt_project/requirements.txt`.
+- `scripts/export_silver_to_pg.py` is a required step in the Airflow DAG.
+- The 5 `pipeline_stg_*` tables in PostgreSQL are disposable —
+  they are fully replaced on every pipeline run.
+
+---
+
+## D-031 — external_id columns on players and real_matches
+
+**Date:** 2026-03-22
+**Status:** Accepted
+
+**Context:** Silver models identify players and matches via `external_id`
+strings from the data provider (e.g. `player_external_id`, `match_external_id`).
+PostgreSQL application tables use UUIDs (`players.id`, `real_matches.id`).
+Gold models need to join these two worlds — there was no bridge column.
+
+**Decision:** Add `external_id TEXT` to `players` and `real_matches`.
+Populated by the connector ingestion script when creating/updating records.
+
+**Migration:** `db/migrations/003_add_external_ids.sql`
+
+```sql
+ALTER TABLE players     ADD COLUMN IF NOT EXISTS external_id TEXT;
+ALTER TABLE real_matches ADD COLUMN IF NOT EXISTS external_id TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_players_external_id
+    ON players (external_id) WHERE external_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_real_matches_external_id
+    ON real_matches (external_id) WHERE external_id IS NOT NULL;
+```
+
+**Join pattern in gold models:**
+
+```sql
+inner join players p
+    on p.external_id = pipeline_stg_players.player_external_id
+inner join real_matches rm
+    on rm.external_id = pipeline_stg_matches.match_external_id
+```
+
+**Consequences:**
+
+- Connector implementations must set `external_id` when upserting players
+  and matches. The mock connector must be updated to include external IDs
+  in fixture data.
+- `external_id` is nullable (INDEX WHERE NOT NULL) — existing rows without
+  a provider ID are not affected.
+- The silver export script (`export_silver_to_pg.py`) does not need to
+  change — it exports the full silver tables as-is.
+
+---
+
+## D-032 — Airflow version pinned to 2.7.2 (pendulum constraint)
+
+**Date:** 2026-03-22
+**Status:** Accepted
+
+**Context:** Airflow 2.8 and 2.9 were yanked from PyPI. Airflow 2.7.2 is
+the last available 2.x release. Airflow 2.x requires pendulum 2.x, but pip
+resolves pendulum 3.x by default — which breaks `pendulum.tz.timezone()`.
+
+**Decision:** Pin `apache-airflow==2.7.2` and `pendulum>=2.0,<3.0` in both
+`airflow/requirements.txt` and `airflow/tests/requirements-test.txt`.
+
+**Rationale:** Airflow 3.x breaks the 2.x operator API (removes
+`provide_context`, `apply_defaults`, restructures BaseOperator). Migrating
+to Airflow 3.x would require a full rewrite of all custom operators. Not
+justified at this stage.
+
+**Consequences:**
+
+- Airflow structural tests require a dedicated Python 3.11 venv (`.venv-airflow`)
+  because Airflow 2.7.2 + pendulum 2.x install cleanly on 3.11.
+- `.venv-airflow/` added to `.gitignore`.
+- `airflow/tests/requirements-test.txt` pins both `apache-airflow` and `pendulum`.
+- Migration to Airflow 3.x deferred to a future phase if needed.
+
+---
+
+## D-033 — Lock authority for weekly lineup: kick_off_time < NOW()
+
+**Date:** 2026-03-22
+**Status:** Accepted
+
+**Context:** Weekly lineups must be locked progressively per match, not globally
+per round (CDC 6.5). The question is what determines whether a player is locked:
+the `kick_off_time` timestamp or the `status` field on `real_matches`.
+
+**Options considered:**
+
+- A) Compare `real_matches.kick_off_time < NOW()` — pure timestamp comparison.
+- B) Use `real_matches.status = 'live'` — depends on the pipeline updating status.
+
+**Decision:** Option A — `kick_off_time < NOW()` is the lock authority.
+
+**Rationale:**
+
+- Independent of the pipeline: lock activates at the exact scheduled time
+  regardless of whether the post_match_pipeline has run yet.
+- No race condition: a pipeline delay cannot accidentally keep a player unlocked
+  past their kick_off.
+- `status` remains useful for display (showing "live" badge) but never for
+  access control decisions.
+
+**Consequences:**
+
+- `_fetch_kickoff_times()` in `LineupService` queries `real_matches.kick_off_time`
+  once per service call and maps club → datetime.
+- `locked_at` stored in `weekly_lineups` is set by the pipeline at kick_off,
+  not by the user submission.
+- If a kick_off_time is corrected after the fact (rare), locked_at in
+  weekly_lineups retains the original value — acceptable for V1.
+
+---
+
+## D-034 — Waiver window: Europe/Paris, Tuesday 07:00 → Wednesday 23:59:59
+
+**Date:** 2026-03-22
+**Status:** Accepted
+
+**Context:** CDC 9.1 specifies "Tuesday morning → Wednesday evening" without
+exact times. The Staff IA Tuesday report triggers at 07:00 (CDC 13.2) —
+the waiver window opens immediately after.
+
+**Decision:** Window opens Tuesday 07:00, closes Wednesday 23:59:59,
+Europe/Paris timezone.
+
+**Rationale:** "Tuesday morning" is a local concept for French users.
+Using UTC would shift the window by one hour in summer (CEST = UTC+2),
+making "Tuesday morning" mean 09:00 local time — confusing.
+zoneinfo.ZoneInfo("Europe/Paris") handles DST automatically.
+
+**Consequences:**
+
+- `WAIVER_OPEN_TIME` and `WAIVER_CLOSE_TIME` are module-level constants
+  in `waivers/window.py` — easy to make per-league configurable in a
+  future phase if needed.
+- The scheduler (Cron Coolify) must be configured in Europe/Paris timezone
+  to match this window.
+
+---
+
+## D-035 — Trade format: symmetric 1-3 players per side
+
+**Date:** 2026-03-22
+**Status:** Accepted
+
+**Context:** CDC §9.2 states "1 joueur contre 1, 2 ou 3 joueurs". This was
+initially misread as "proposer always sends exactly 1 player". The intended
+meaning (confirmed by the product owner) is symmetric: each side sends
+1, 2, or 3 players.
+
+**Decision:** Both proposer and receiver send between 1 and 3 players.
+Valid formats: 1v1, 1v2, 1v3, 2v1, 2v2, 2v3, 3v1, 3v2, 3v3.
+
+**Rationale:** Consistent with fantasy US apps (ESPN, Sleeper) which
+inspired the trade mechanic. A 2v2 or 3v1 trade is a legitimate strategy.
+
+**Consequences:** `_check_format()` in `validate_trade.py` validates
+both sides symmetrically.
+
+---
+
+## D-036 — Trade veto audit: veto_at + veto_reason columns on trades table
+
+**Date:** 2026-03-22
+**Status:** Accepted
+
+**Context:** CDC §9.2 requires the commissioner veto to be logged with a
+reason visible to all managers. The question was whether to use a separate
+audit table or columns on the existing `trades` table.
+
+**Decision:** Add `veto_reason TEXT` and `veto_at TIMESTAMPTZ` directly
+to the `trades` table (migration 004). Also add `cancelled_at` and
+`completed_at` for full transition traceability.
+
+**Rationale:** Trade volume is low (at most a few dozen per league per
+season). A separate audit table would be overkill. All transition data
+fits cleanly on a single row. The log page queries one table with no joins.
+
+**Consequences:**
+
+- Migration 004 adds 4 columns to `trades` via ALTER TABLE.
+- `TradeRecord` (processor) carries these fields in memory.
+- `trade_service._update_trade_status()` persists them on each transition.

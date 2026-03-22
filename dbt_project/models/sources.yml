@@ -1,0 +1,317 @@
+# =============================================================================
+# dbt_project/models/sources.yml
+# =============================================================================
+# Declares all PostgreSQL tables used as sources in gold models.
+#
+# Two categories of sources (D-030):
+#
+#   1. Application tables — written by FastAPI backend (via Supabase service role)
+#      weekly_lineups, rosters, roster_slots, league_members, leagues,
+#      league_fixtures, competitions, competition_rounds, real_matches,
+#      players, fantasy_scores, fantasy_scores_staging
+#
+#   2. Pipeline staging tables — written by export_silver_to_pg.py
+#      pipeline_stg_match_stats, pipeline_stg_matches, pipeline_stg_players,
+#      pipeline_stg_fixtures, pipeline_stg_player_availability
+#
+#      These are the silver dbt models (DuckDB) exported to PostgreSQL so
+#      that gold models can join them with application tables in a single
+#      PostgreSQL query. Prefixed with `pipeline_` to avoid naming conflicts.
+#      Always fully replaced on each pipeline run.
+#
+# Source name: 'postgres'
+#   Used in gold models as: {{ source('postgres', 'table_name') }}
+#   Resolved using the active target connection (prod = Supabase).
+# =============================================================================
+
+version: 2
+
+sources:
+  - name: postgres
+    description: >
+      PostgreSQL tables managed outside dbt (migrations, FastAPI backend,
+      and the silver export script). All tables live in the public schema
+      of the Supabase PostgreSQL database.
+    database: "{{ env_var('DBT_DATABASE', 'postgres') }}"
+    schema: public
+
+    tables:
+      # -----------------------------------------------------------------------
+      # Pipeline staging tables
+      # Written by: scripts/export_silver_to_pg.py (step 3 of Airflow DAG)
+      # Fully replaced on every pipeline run — never read by the application.
+      # -----------------------------------------------------------------------
+
+      - name: pipeline_stg_match_stats
+        description: >
+          Silver stg_match_stats exported from DuckDB. One row per player
+          per match. All conditional stats have COALESCE(stat, 0) applied.
+          Replaced in full on every pipeline run.
+        columns:
+          - name: player_id
+            tests: [not_null]
+          - name: match_id
+            tests: [not_null]
+
+      - name: pipeline_stg_matches
+        description: >
+          Silver stg_matches exported from DuckDB. Finished matches only,
+          with kickoff_at and competition_round_id.
+        columns:
+          - name: match_id
+            tests: [not_null]
+          - name: competition_round_id
+            tests: [not_null]
+          - name: kickoff_at
+            tests: [not_null]
+          - name: status
+            tests:
+              - not_null
+              - accepted_values:
+                  config:
+                    values: [finished, live, scheduled, postponed]
+
+      - name: pipeline_stg_players
+        description: >
+          Silver stg_players exported from DuckDB. Player reference data
+          with positions array, nationality, and club.
+        columns:
+          - name: player_id
+            tests: [not_null, unique]
+          - name: name
+            tests: [not_null]
+
+      - name: pipeline_stg_fixtures
+        description: >
+          Silver stg_fixtures exported from DuckDB. All fixtures with
+          canonical column names and kickoff_at.
+        columns:
+          - name: match_id
+            tests: [not_null]
+
+      - name: pipeline_stg_player_availability
+        description: >
+          Silver stg_player_availability exported from DuckDB. Current
+          injury and suspension status per player per competition.
+        columns:
+          - name: player_id
+            tests: [not_null]
+          - name: competition_id
+            tests: [not_null]
+          - name: status
+            tests:
+              - not_null
+              - accepted_values:
+                  config:
+                    values: [available, injured, suspended, doubtful]
+
+      # -----------------------------------------------------------------------
+      # Reference / competition tables
+      # Written by: migrations + connector ingestion scripts
+      # -----------------------------------------------------------------------
+
+      - name: competitions
+        description: >
+          Competition reference table. One row per competition season.
+          competition_type: international | club.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+          - name: name
+            tests: [not_null]
+          - name: competition_type
+            tests:
+              - not_null
+              - accepted_values:
+                  config:
+                    values: [international, club]
+          - name: status
+            tests:
+              - not_null
+              - accepted_values:
+                  config:
+                    values: [active, archived, upcoming]
+
+      - name: competition_rounds
+        description: >
+          One row per round within a competition.
+          round_number is 1-indexed.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+          - name: competition_id
+            tests: [not_null]
+          - name: round_number
+            tests: [not_null]
+
+      - name: real_matches
+        description: >
+          Individual matches within a competition round.
+          status: scheduled | live | finished | postponed.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+          - name: competition_round_id
+            tests: [not_null]
+          - name: status
+            tests:
+              - not_null
+              - accepted_values:
+                  config:
+                    values: [scheduled, live, finished, postponed]
+        freshness:
+          warn_after: { count: 3, period: day }
+          error_after: { count: 7, period: day }
+        loaded_at_field: updated_at
+
+      - name: players
+        description: >
+          Player reference data. positions is an array (multi-position players).
+        columns:
+          - name: id
+            tests: [not_null, unique]
+          - name: name
+            tests: [not_null]
+        freshness:
+          warn_after: { count: 7, period: day }
+          error_after: { count: 14, period: day }
+        loaded_at_field: updated_at
+
+      # -----------------------------------------------------------------------
+      # Application tables
+      # Written by: FastAPI backend (Supabase service role)
+      # -----------------------------------------------------------------------
+
+      - name: leagues
+        description: >
+          One row per fantasy league. settings JSONB stores commissioner
+          options (veto_enabled, pick_timer_seconds, etc.).
+        columns:
+          - name: id
+            tests: [not_null, unique]
+          - name: competition_id
+            tests: [not_null]
+          - name: commissioner_id
+            tests: [not_null]
+          - name: status
+            tests:
+              - not_null
+              - accepted_values:
+                  config:
+                    values: [draft_pending, draft_open, active, archived]
+
+      - name: league_members
+        description: >
+          Join table between leagues and users.
+          is_ghost_team = true for computer-managed teams.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+          - name: league_id
+            tests: [not_null]
+          - name: is_ghost_team
+            tests:
+              - not_null
+              - accepted_values:
+                  config:
+                    values: [true, false]
+
+      - name: league_fixtures
+        description: Weekly matchup schedule within a league.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+          - name: league_id
+            tests: [not_null]
+          - name: round_number
+            tests: [not_null]
+          - name: home_member_id
+            tests: [not_null]
+          - name: away_member_id
+            tests: [not_null]
+
+      - name: rosters
+        description: One roster per (league, member).
+        columns:
+          - name: id
+            tests: [not_null, unique]
+          - name: league_id
+            tests: [not_null]
+          - name: member_id
+            tests: [not_null, unique]
+
+      - name: roster_slots
+        description: >
+          One row per player on a roster.
+          slot_type: starter | bench | ir.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+          - name: roster_id
+            tests: [not_null]
+          - name: player_id
+            tests: [not_null]
+          - name: slot_type
+            tests:
+              - not_null
+              - accepted_values:
+                  config:
+                    values: [starter, bench, ir]
+
+      - name: weekly_lineups
+        description: >
+          Per-player lineup for each round. locked_at set at kick-off.
+          Progressive lock: is_captain/is_kicker/position immutable after lock.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+          - name: roster_id
+            tests: [not_null]
+          - name: round_id
+            tests: [not_null]
+          - name: player_id
+            tests: [not_null]
+          - name: slot_type
+            tests:
+              - not_null
+              - accepted_values:
+                  config:
+                    values: [starter, bench, ir]
+          - name: is_captain
+            tests: [not_null]
+          - name: is_kicker
+            tests: [not_null]
+        freshness:
+          warn_after: { count: 8, period: day }
+          error_after: { count: 15, period: day }
+        loaded_at_field: updated_at
+
+      # -----------------------------------------------------------------------
+      # Scoring tables
+      # Written by: Airflow post_match_pipeline (service role)
+      # -----------------------------------------------------------------------
+
+      - name: fantasy_scores
+        description: >
+          Production fantasy scores. Written by atomic commit step.
+          Never written directly by the application.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+          - name: roster_id
+            tests: [not_null]
+          - name: round_id
+            tests: [not_null]
+          - name: player_id
+            tests: [not_null]
+          - name: total_points
+            tests: [not_null]
+        freshness:
+          warn_after: { count: 7, period: day }
+          error_after: { count: 14, period: day }
+        loaded_at_field: created_at
+
+      - name: fantasy_scores_staging
+        description: >
+          Staging table for atomic commit (D-003). Managed exclusively
+          by the pipeline. Legitimately empty between pipeline runs.

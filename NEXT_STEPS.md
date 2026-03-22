@@ -1,7 +1,7 @@
 # NEXT_STEPS.md — RugbyDraft
 
-> Current status: Phase 2 in progress — Draft Assistée complete. Ghost team next.
-> Last updated: 2026-03-20
+> Current status: Phase 3 in progress — Gold pipeline complete. Airflow DAG next.
+> Last updated: 2026-03-22
 
 ---
 
@@ -101,7 +101,7 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ---
 
-## 🔴 Phase 2 — Draft Engine (next)
+## ✅ Phase 2 — Draft Engine (complete)
 
 **Estimated duration:** 3–4 weeks
 **Prerequisite:** Phase 1 complete ✅, PostgreSQL schema live ✅.
@@ -155,72 +155,94 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ---
 
-## Phase 3 — Gameplay
+## 🟡 Phase 3 — Gameplay (in progress)
 
 **Estimated duration:** 2–3 weeks
 **Prerequisite:** Phase 2 complete + data provider confirmed (D-012).
 
+### Database migrations
+
+- [x] Migration 002: `weekly_lineups`, `waivers`, `trades`, `trade_players`,
+      `fantasy_scores_staging`, `drafts.manager_order` — all with RLS + indexes
+- [x] Migration 003: `players.external_id`, `real_matches.external_id`
+      — bridge between silver pipeline IDs and PostgreSQL UUIDs (D-031)
+- [x] `weekly_lineups.slot_type` column added (ALTER TABLE — was missing from 001)
+
 ### Data pipeline — Gold
 
-- [ ] `mart_fantasy_points`: scoring logic per player per round
-  - Captain ×1.5 (rounded up to nearest 0.5)
-  - Kicker stats only for designated kicker
-  - `COALESCE(stat, 0)` for all conditional stats
-- [ ] `mart_roster_scores`: aggregate points per roster per round
-- [ ] `mart_leaderboard`: standings per league
-- [ ] `mart_player_pool`: available players per league
-- [ ] `mart_player_value`: default value score for autodraft
+- [x] Dual-target dbt architecture: DuckDB (ci) + PostgreSQL (prod) — D-030
+- [x] `scripts/export_silver_to_pg.py` — DuckDB → PostgreSQL bridge for gold models
+- [x] `dbt_project/models/sources.yml` — all PostgreSQL sources declared
+- [x] `mart_fantasy_points`: full CDC scoring — captain ×1.5 (nearest 0.5),
+      kicker-only stats, COALESCE on all stats, double-match dedup via
+      `is_first_match_of_round` (CDC 6.6)
+- [x] `mart_roster_scores`: aggregate points per roster per round
+- [x] `mart_leaderboard`: standings with wins/losses, DENSE_RANK, tiebreaker
+- [x] `mart_player_pool`: free/drafted/injured/suspended status per league
+- [x] `mart_player_value`: default value score for autodraft (recency-weighted)
+- [x] `dbt run --target prod --select gold` passes — 5/5 models ✅
+- [ ] `dbt test --target prod --select gold` — run after seeding real data
 
 ### Airflow — post_match_pipeline
 
-- [ ] DAG: detect → ingest → bronze → dbt silver → dbt gold → write to `fantasy_scores_staging` → atomic commit → notify
-- [ ] Atomic commit: single PostgreSQL transaction `fantasy_scores_staging` → `fantasy_scores`
-- [ ] "Scores being processed" indicator while pipeline runs
-- [ ] Retry: 3 attempts with exponential backoff on API failure
+- [x] DAG: detect → ingest → bronze → dbt silver → dbt gold → write to `fantasy_scores_staging` → atomic commit → notify
+- [x] Atomic commit: single PostgreSQL transaction `fantasy_scores_staging` → `fantasy_scores`
+- [ ] "Scores being processed" indicator while pipeline runs (frontend — Phase 4)
+- [x] Retry: 3 attempts with exponential backoff on API failure
 
 ### Weekly lineup management
 
-- [ ] Starter/bench/IR slot management API
-- [ ] Progressive lock: per-match, not per-round (locked at kick-off of player's team match)
-- [ ] Lock validation: cannot change captain/kicker after their team's kick-off
-- [ ] Multi-position player: position choice locked at kick-off
+- [x] Starter/bench/IR slot management API
+- [x] Progressive lock: per-match, not per-round (locked at kick-off of player's team match)
+- [x] Lock validation: cannot change captain/kicker after their team's kick-off
+- [x] Multi-position player: position choice locked at kick-off
 
 ### Edge cases (from CDC section 6.6)
 
-- [ ] Player plays two matches in same round → only first match counts
-- [ ] Captain change between two matches in same round → allowed until captain's team kick-off
-- [ ] Kicker change after first match → blocked until next round
+- [x] Player plays two matches in same round → only first match counts
+- [x] Captain change between two matches in same round → allowed until captain's team kick-off
+- [x] Kicker change after first match → blocked until next round
 
 ### Waivers
 
-- [ ] Waiver window: Tuesday morning → Wednesday evening
-- [ ] Priority: lowest-ranked manager first
-- [ ] Priority reset after each cycle
-- [ ] Blocking rule: manager with unintegrated recovered IR player cannot claim waivers
+- [x] Waiver window: Tuesday morning → Wednesday evening
+- [x] Priority: lowest-ranked manager first
+- [x] Priority reset after each cycle
+- [x] Blocking rule: manager with unintegrated recovered IR player cannot claim waivers
+- [x] Waiver priority ordering
+- [x] Waiver block: IR player not reintegrated
 
 ### Trades
 
-- [ ] Trade window: start of competition → mid-season (`ceil(total_rounds / 2)`)
-- [ ] Formats: 1v1, 1v2, 1v3
-- [ ] Commissioner veto: 24h window, must provide reason (text field), log visible to all
-- [ ] Trade blocking rule: same as waivers (unintegrated IR player)
-- [ ] Trades blocked after mid-season
+- [x] Trade window: start of competition → mid-season (`ceil(total_rounds / 2)`)
+- [x] Formats: 1v1, 1v2, 1v3 (symmetric — each side sends 1, 2, or 3 players)
+- [x] Commissioner veto: 24h window, must provide reason (text field), log visible to all
+- [x] Trade blocking rule: same as waivers (unintegrated IR player)
+- [x] Trades blocked after mid-season
 
 ### Infirmary rules
 
-- [ ] IR slot capacity: 3 players max
-- [ ] Auto-notification on recovery / suspension end
-- [ ] 1-week reintegration deadline before waiver/trade blocking activates
-- [ ] Alert on dashboard: "Player X recovered — reintegrate within X days"
+- [x] IR slot capacity: 3 players max
+- [x] Auto-notification on recovery / suspension end
+- [x] 1-week reintegration deadline before waiver/trade blocking activates
+- [x] Alert on dashboard: "Player X recovered — reintegrate within X days"
 
 ### Tests
 
-- [ ] Fantasy points calculation: captain multiplier, kicker-only stats, COALESCE
-- [ ] Edge case: double match in same round
-- [ ] Waiver priority ordering
-- [ ] Waiver block: IR player not reintegrated
-- [ ] Trade window enforcement (mid-season cutoff)
+- [x] Fantasy points calculation: captain multiplier, kicker-only stats, COALESCE
+- [x] Edge case: double match in same round
+- [x] Waiver priority ordering
+- [x] Waiver block: IR player not reintegrated
+- [x] Trade window enforcement (mid-season cutoff)
+
+---
+
+### Deferred integration tests (Phase 4)
+
 - [ ] Atomic commit: simulate pipeline failure mid-run, verify production data unchanged
+- [ ] IR endpoints: integration tests with mocked AsyncClient (KB-007)
+- [ ] Waiver apply: atomic write test (KB-004)
+- [ ] Trade apply: atomic write test (KB-006)
 
 ---
 
@@ -302,5 +324,5 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 ## Immediate next actions
 
 **→ Phase 0 (parallel):** await responses from Statscore and DSG.
-**→ Phase 2 (current):** Draft Assistée — commissioner fallback mode.
+**→ Phase 3 (current):** Infirmary rules
 **→ Phase 1 — remaining:** Cron Coolify config (after first deploy to Hetzner).

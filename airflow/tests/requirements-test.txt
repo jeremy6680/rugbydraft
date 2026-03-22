@@ -1,0 +1,17 @@
+# airflow/tests/requirements-test.txt
+# Test-only dependencies — installed in CI, not in the Docker image.
+# Install with: pip install -r airflow/tests/requirements-test.txt
+
+# Airflow — pendulum must be pinned to 2.x (Airflow 2.7 incompatible with pendulum 3.x)
+apache-airflow==2.7.2
+pendulum>=2.0,<3.0
+
+# PostgreSQL driver — required by atomic_commit_operator import
+psycopg2-binary==2.9.9
+
+# HTTP client — required by post_match_pipeline import
+httpx==0.27.0
+
+# pytest
+pytest==8.2.0
+pytest-mock==3.14.0

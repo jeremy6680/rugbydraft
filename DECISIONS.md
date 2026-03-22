@@ -1150,3 +1150,30 @@ inner join real_matches rm
   a provider ID are not affected.
 - The silver export script (`export_silver_to_pg.py`) does not need to
   change — it exports the full silver tables as-is.
+
+---
+
+## D-032 — Airflow version pinned to 2.7.2 (pendulum constraint)
+
+**Date:** 2026-03-22
+**Status:** Accepted
+
+**Context:** Airflow 2.8 and 2.9 were yanked from PyPI. Airflow 2.7.2 is
+the last available 2.x release. Airflow 2.x requires pendulum 2.x, but pip
+resolves pendulum 3.x by default — which breaks `pendulum.tz.timezone()`.
+
+**Decision:** Pin `apache-airflow==2.7.2` and `pendulum>=2.0,<3.0` in both
+`airflow/requirements.txt` and `airflow/tests/requirements-test.txt`.
+
+**Rationale:** Airflow 3.x breaks the 2.x operator API (removes
+`provide_context`, `apply_defaults`, restructures BaseOperator). Migrating
+to Airflow 3.x would require a full rewrite of all custom operators. Not
+justified at this stage.
+
+**Consequences:**
+
+- Airflow structural tests require a dedicated Python 3.11 venv (`.venv-airflow`)
+  because Airflow 2.7.2 + pendulum 2.x install cleanly on 3.11.
+- `.venv-airflow/` added to `.gitignore`.
+- `airflow/tests/requirements-test.txt` pins both `apache-airflow` and `pendulum`.
+- Migration to Airflow 3.x deferred to a future phase if needed.

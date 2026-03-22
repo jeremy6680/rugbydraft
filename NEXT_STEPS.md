@@ -185,10 +185,10 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ### Airflow — post_match_pipeline
 
-- [ ] DAG: detect → ingest → bronze → dbt silver → dbt gold → write to `fantasy_scores_staging` → atomic commit → notify
-- [ ] Atomic commit: single PostgreSQL transaction `fantasy_scores_staging` → `fantasy_scores`
-- [ ] "Scores being processed" indicator while pipeline runs
-- [ ] Retry: 3 attempts with exponential backoff on API failure
+- [x] DAG: detect → ingest → bronze → dbt silver → dbt gold → write to `fantasy_scores_staging` → atomic commit → notify
+- [x] Atomic commit: single PostgreSQL transaction `fantasy_scores_staging` → `fantasy_scores`
+- [ ] "Scores being processed" indicator while pipeline runs (frontend — Phase 4)
+- [x] Retry: 3 attempts with exponential backoff on API failure
 
 ### Weekly lineup management
 

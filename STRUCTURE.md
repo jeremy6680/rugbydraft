@@ -354,3 +354,49 @@ All required variables are documented in `.env.example`.
 Never commit `.env` or any file containing real secrets.
 
 See `.env.example` for the full list with descriptions.
+
+---
+
+## airflow/
+
+Airflow 2.7.2 — orchestrates the `post_match_pipeline` DAG only.
+All other scheduled tasks use Cron Coolify (see DECISIONS.md D-002).
+
+### Layout
+
+| Path                                          | Purpose                                                                            |
+| --------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `dags/post_match_pipeline.py`                 | Main DAG: detect → ingest → bronze+silver → export → gold → atomic commit → notify |
+| `plugins/operators/dbt_operator.py`           | Custom `DbtRunOperator` and `DbtTestOperator`                                      |
+| `plugins/operators/atomic_commit_operator.py` | Atomic PostgreSQL transaction: staging → fantasy_scores                            |
+| `tests/conftest.py`                           | pytest path setup — loads plugins and dags dirs before test imports                |
+| `tests/test_dag_structure.py`                 | 29 structural tests — task presence, dependencies, configuration                   |
+| `tests/requirements-test.txt`                 | Test-only deps (apache-airflow, pendulum<3, psycopg2, httpx, pytest)               |
+| `Dockerfile`                                  | Custom image: apache/airflow:2.7.2 + dbt + duckdb + psycopg2                       |
+| `docker-compose.yml`                          | Local setup: LocalExecutor, airflow-postgres metadata DB, UI on :8080              |
+| `requirements.txt`                            | Extra pip deps added on top of the base image                                      |
+| `.env.example`                                | Environment variable template for local dev                                        |
+
+### Run order (local)
+
+```bash
+# One-time setup
+cd airflow/
+docker compose up airflow-init
+
+# Start
+docker compose up -d
+
+# UI
+open http://localhost:8080  # admin / admin
+```
+
+### Test setup (no Docker needed)
+
+```bash
+# Dedicated venv — Python 3.11 required (Airflow 2.7 + pendulum 2.x constraint)
+python -m venv .venv-airflow
+source .venv-airflow/bin/activate
+pip install -r airflow/tests/requirements-test.txt
+pytest airflow/tests/test_dag_structure.py -v
+```

@@ -19,6 +19,7 @@ dist/
 build/
 .venv/
 venv/
+.venv-airflow/
 htmlcov/
 .coverage
 coverage.xml
@@ -53,6 +54,7 @@ logs/
 # ── Airflow ───────────────────────────────────────────────────────────────────
 airflow/logs/
 airflow/plugins/__pycache__/
+airflow/.env
 
 # ── OS ────────────────────────────────────────────────────────────────────────
 .DS_Store

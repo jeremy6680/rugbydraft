@@ -1,0 +1,117 @@
+# airflow/docker-compose.yml
+# Local Airflow 2.9 setup — LocalExecutor, no Redis, no Celery.
+# Build context is set to repo root so Dockerfile can COPY ../connectors etc.
+#
+# Usage:
+#   cd airflow/
+#   docker compose up airflow-init    # run once to initialize the DB
+#   docker compose up -d              # start webserver + scheduler
+#   docker compose down               # stop all services
+#
+# UI: http://localhost:8080  (admin / admin in local dev)
+
+x-airflow-common:
+  &airflow-common # Build from repo root so COPY ../connectors works in Dockerfile
+  build:
+    context: ..
+    dockerfile: airflow/Dockerfile
+  environment:
+    # Core Airflow config
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+
+    # Airflow metadata DB (local Postgres container)
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres:5432/airflow
+
+    # Webserver
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-changeme-local-only}
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+
+    # No email alerts in local dev
+    AIRFLOW__EMAIL__EMAIL_BACKEND: airflow.utils.email.send_email_smtp
+    AIRFLOW__SMTP__SMTP_HOST: ""
+
+    # Project env vars — passed through from .env
+    # Data pipeline
+    RUGBY_DATA_SOURCE: ${RUGBY_DATA_SOURCE:-mock}
+    DBT_TARGET: ${DBT_TARGET:-ci}
+
+    # Supabase / PostgreSQL (gold layer + atomic commit)
+    SUPABASE_DB_HOST: ${SUPABASE_DB_HOST:-}
+    SUPABASE_DB_PORT: ${SUPABASE_DB_PORT:-5432}
+    SUPABASE_DB_NAME: ${SUPABASE_DB_NAME:-}
+    SUPABASE_DB_USER: ${SUPABASE_DB_USER:-}
+    SUPABASE_DB_PASSWORD: ${SUPABASE_DB_PASSWORD:-}
+
+    # Notification flag (FastAPI endpoint called by notify task)
+    FASTAPI_INTERNAL_URL: ${FASTAPI_INTERNAL_URL:-http://host.docker.internal:8000}
+    PIPELINE_NOTIFY_SECRET: ${PIPELINE_NOTIFY_SECRET:-changeme-local-only}
+
+  volumes:
+    # Live-mount DAGs and plugins — no rebuild needed on code changes
+    - ./dags:/opt/airflow/dags
+    - ./plugins:/opt/airflow/plugins
+    - ./logs:/opt/airflow/logs
+    # DuckDB data directory — shared between ingest and dbt tasks
+    - ../data:/opt/airflow/project/data
+  depends_on:
+    airflow-postgres:
+      condition: service_healthy
+  extra_hosts:
+    # Allows containers to reach host machine (FastAPI dev server)
+    - "host.docker.internal:host-gateway"
+
+services:
+  # Airflow metadata database (separate from Supabase — local only)
+  airflow-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Run once: initializes Airflow DB and creates admin user
+  airflow-init:
+    <<: *airflow-common
+    command: >
+      bash -c "
+        airflow db migrate &&
+        airflow users create
+          --username admin
+          --password admin
+          --firstname Admin
+          --lastname User
+          --role Admin
+          --email admin@rugbydraft.local
+      "
+    restart: "no"
+
+  # Airflow web UI — http://localhost:8080
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # DAG scheduler — detects and triggers DAG runs
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    restart: unless-stopped
+
+volumes:
+  airflow-postgres-data:

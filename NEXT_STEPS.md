@@ -205,10 +205,12 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ### Waivers
 
-- [ ] Waiver window: Tuesday morning → Wednesday evening
-- [ ] Priority: lowest-ranked manager first
-- [ ] Priority reset after each cycle
-- [ ] Blocking rule: manager with unintegrated recovered IR player cannot claim waivers
+- [x] Waiver window: Tuesday morning → Wednesday evening
+- [x] Priority: lowest-ranked manager first
+- [x] Priority reset after each cycle
+- [x] Blocking rule: manager with unintegrated recovered IR player cannot claim waivers
+- [x] Waiver priority ordering
+- [x] Waiver block: IR player not reintegrated
 
 ### Trades
 
@@ -229,8 +231,8 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 - [x] Fantasy points calculation: captain multiplier, kicker-only stats, COALESCE
 - [x] Edge case: double match in same round
-- [ ] Waiver priority ordering
-- [ ] Waiver block: IR player not reintegrated
+- [x] Waiver priority ordering
+- [x] Waiver block: IR player not reintegrated
 - [ ] Trade window enforcement (mid-season cutoff)
 - [ ] Atomic commit: simulate pipeline failure mid-run, verify production data unchanged
 

@@ -1213,3 +1213,30 @@ the `kick_off_time` timestamp or the `status` field on `real_matches`.
   not by the user submission.
 - If a kick_off_time is corrected after the fact (rare), locked_at in
   weekly_lineups retains the original value — acceptable for V1.
+
+---
+
+## D-034 — Waiver window: Europe/Paris, Tuesday 07:00 → Wednesday 23:59:59
+
+**Date:** 2026-03-22
+**Status:** Accepted
+
+**Context:** CDC 9.1 specifies "Tuesday morning → Wednesday evening" without
+exact times. The Staff IA Tuesday report triggers at 07:00 (CDC 13.2) —
+the waiver window opens immediately after.
+
+**Decision:** Window opens Tuesday 07:00, closes Wednesday 23:59:59,
+Europe/Paris timezone.
+
+**Rationale:** "Tuesday morning" is a local concept for French users.
+Using UTC would shift the window by one hour in summer (CEST = UTC+2),
+making "Tuesday morning" mean 09:00 local time — confusing.
+zoneinfo.ZoneInfo("Europe/Paris") handles DST automatically.
+
+**Consequences:**
+
+- `WAIVER_OPEN_TIME` and `WAIVER_CLOSE_TIME` are module-level constants
+  in `waivers/window.py` — easy to make per-league configurable in a
+  future phase if needed.
+- The scheduler (Cron Coolify) must be configured in Europe/Paris timezone
+  to match this window.

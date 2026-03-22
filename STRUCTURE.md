@@ -65,11 +65,13 @@ backend/
 │   │   ├── __init__.py
 │   │   ├── health.py          # GET /health — liveness probe (public, no JWT)
 │   │   ├── lineup.py          # 4 endpoints: GET/PUT lineup, PATCH captain/kicker
+│   │   ├── waivers.py         # 4 endpoints: POST/GET claims, DELETE cancel, POST process
 │   │   ├── draft.py           # POST /connect, POST /disconnect, GET /state
 │   │   └── draft_assisted.py  # POST /assisted/enable, POST /assisted/pick
 │   │                          # GET /assisted/log — commissioner-only (403 if not)
 │   ├── services/
-│   │   └── lineup_service.py  # Business logic: lock validation, IR exclusion, multi-position, CDC 6.6 edge cases
+│   │   ├── lineup_service.py  # Business logic: lock validation, IR exclusion, multi-position, CDC 6.6 edge cases
+│   │   └── waiver_service.py  # Waiver I/O: submit, cancel, list, process cycle
 │   ├── schemas/
 │   │ ├── **init**.py
 │   │ └── draft.py             # Pydantic response models for draft endpoints (D-025)
@@ -123,6 +125,12 @@ backend/
 │   └── registry.py          # DraftRegistry — thread-safe dict league_id → DraftEngine
 │                            # Stored as app.state.draft_registry (FastAPI lifespan)
 │                            # register(), get(), remove(), active_league_ids()
+├── waivers/
+│   ├── __init__.py          # Waiver system package marker
+│   ├── window.py            # Pure: waiver window open/closed (Tue 07:00 → Wed 23:59:59)
+│   ├── priority.py          # Pure: priority ordering from league standings
+│   ├── validate_claim.py    # Pure: 5-rule claim validation (window, ghost, IR, free, owned)
+│   └── processor.py         # Pure: full cycle processing — granted/denied/skipped
 ├── tests/
 │   ├── __init__.py
 │   ├── test_health.py       # 8 tests — health endpoint + auth middleware

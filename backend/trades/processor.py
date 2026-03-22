@@ -1,0 +1,378 @@
+"""Trade state machine for RugbyDraft.
+
+Each action (propose, accept, reject, cancel, veto) is a pure state
+transition: takes a TradeRecord in, returns an updated TradeRecord out.
+No I/O, no database calls — persistence is handled by trade_service.py.
+
+State machine:
+    PENDING → ACCEPTED → COMPLETED  (auto if no veto, or after veto deadline)
+    PENDING → ACCEPTED → VETOED     (commissioner veto within 24h window)
+    PENDING → REJECTED
+    PENDING → CANCELLED
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, replace
+from datetime import datetime, timedelta
+from enum import Enum
+
+from trades.validate_trade import TradeProposal, validate_trade
+
+
+# ---------------------------------------------------------------------------
+# Trade status enum
+# ---------------------------------------------------------------------------
+
+
+class TradeStatus(str, Enum):
+    """All possible states of a trade record.
+
+    Inherits from str so Pydantic serialises it as a plain string
+    (same pattern as draft status in engine.py).
+    """
+
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    CANCELLED = "cancelled"
+    COMPLETED = "completed"
+    VETOED = "vetoed"
+
+
+# ---------------------------------------------------------------------------
+# Trade record — the authoritative in-memory state of a trade
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class TradePlayerEntry:
+    """One player involved in the trade, with direction.
+
+    Attributes:
+        player_id: The player UUID.
+        from_member_id: The member giving this player away.
+        to_member_id: The member receiving this player.
+    """
+
+    player_id: str
+    from_member_id: str
+    to_member_id: str
+
+
+@dataclass(frozen=True)
+class TradeRecord:
+    """The full state of a trade at a given point in time.
+
+    This is the object the processor operates on. It maps 1:1 to the
+    `trades` + `trade_players` tables, but lives purely in memory here.
+
+    Attributes:
+        trade_id: UUID of the trade (assigned at creation).
+        league_id: The league this trade belongs to.
+        proposer_id: Member UUID of the manager who initiated the trade.
+        receiver_id: Member UUID of the manager who received the proposal.
+        status: Current state of the trade.
+        players: All player entries involved (both directions).
+        veto_enabled: Whether the commissioner veto option is active for
+            this league (set at league creation, never changes).
+        veto_deadline: Datetime after which the commissioner can no longer
+            veto. Set when status transitions to ACCEPTED. None otherwise.
+        veto_reason: Free-text reason entered by the commissioner. None
+            unless status is VETOED.
+        veto_at: Timestamp when the veto was cast. None unless VETOED.
+        created_at: When the trade was proposed.
+    """
+
+    trade_id: str
+    league_id: str
+    proposer_id: str
+    receiver_id: str
+    status: TradeStatus
+    players: tuple[TradePlayerEntry, ...]
+    veto_enabled: bool
+    veto_deadline: datetime | None
+    veto_reason: str | None
+    veto_at: datetime | None
+    created_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Processor errors — typed, one per invalid transition
+# ---------------------------------------------------------------------------
+
+
+class TradeProcessorError(Exception):
+    """Base class for all trade processor errors."""
+
+
+class TradeInvalidStatusError(TradeProcessorError):
+    """Raised when an action is attempted on a trade in the wrong status."""
+
+
+class TradeVetoWindowExpiredError(TradeProcessorError):
+    """Raised when the commissioner tries to veto after the 24h deadline."""
+
+
+class TradeVetoNotEnabledError(TradeProcessorError):
+    """Raised when veto is attempted on a league where it is not enabled."""
+
+
+class TradeVetoReasonRequiredError(TradeProcessorError):
+    """Raised when a veto is submitted without a reason (CDC §9.2)."""
+
+
+# ---------------------------------------------------------------------------
+# Pure state transition functions
+# ---------------------------------------------------------------------------
+
+# Duration of the commissioner veto window after a trade is accepted.
+VETO_WINDOW_HOURS: int = 24
+
+
+def propose_trade(
+    proposal: TradeProposal,
+    trade_id: str,
+    league_id: str,
+    veto_enabled: bool,
+    now: datetime,
+) -> TradeRecord:
+    """Validate and create a new trade in PENDING status.
+
+    This is the entry point for all trade creation. Validation runs first —
+    if any rule fails, the typed exception propagates to the caller (router).
+
+    Args:
+        proposal: Fully populated trade proposal (all validation data included).
+        trade_id: UUID pre-generated by the caller (trade_service).
+        league_id: The league UUID.
+        veto_enabled: Whether commissioner veto is active on this league.
+        now: Current UTC datetime (injected for testability).
+
+    Returns:
+        A new TradeRecord in PENDING status.
+
+    Raises:
+        TradeValidationError subclasses: if any of the 7 rules fail.
+    """
+    # Run all 7 validation rules — raises on first failure.
+    validate_trade(proposal)
+
+    # Build player entries from both sides of the proposal.
+    players: list[TradePlayerEntry] = []
+
+    for player_id in proposal.proposer.player_ids:
+        players.append(
+            TradePlayerEntry(
+                player_id=player_id,
+                from_member_id=proposal.proposer.member_id,
+                to_member_id=proposal.receiver.member_id,
+            )
+        )
+    for player_id in proposal.receiver.player_ids:
+        players.append(
+            TradePlayerEntry(
+                player_id=player_id,
+                from_member_id=proposal.receiver.member_id,
+                to_member_id=proposal.proposer.member_id,
+            )
+        )
+
+    return TradeRecord(
+        trade_id=trade_id,
+        league_id=league_id,
+        proposer_id=proposal.proposer.member_id,
+        receiver_id=proposal.receiver.member_id,
+        status=TradeStatus.PENDING,
+        players=tuple(players),
+        veto_enabled=veto_enabled,
+        veto_deadline=None,
+        veto_reason=None,
+        veto_at=None,
+        created_at=now,
+    )
+
+
+def accept_trade(record: TradeRecord, now: datetime) -> TradeRecord:
+    """Receiver accepts the trade proposal.
+
+    If veto is enabled on the league, the trade moves to ACCEPTED and a
+    24h veto window opens. The trade_service will poll for expired veto
+    windows and auto-complete them.
+
+    If veto is not enabled, the trade moves directly to COMPLETED.
+
+    Args:
+        record: The current TradeRecord (must be PENDING).
+        now: Current UTC datetime (injected for testability).
+
+    Returns:
+        Updated TradeRecord in ACCEPTED or COMPLETED status.
+
+    Raises:
+        TradeInvalidStatusError: If the trade is not in PENDING status.
+    """
+    if record.status != TradeStatus.PENDING:
+        raise TradeInvalidStatusError(
+            f"Cannot accept a trade in status '{record.status}'. "
+            "Only PENDING trades can be accepted."
+        )
+
+    if record.veto_enabled:
+        # Open the 24h commissioner veto window.
+        return replace(
+            record,
+            status=TradeStatus.ACCEPTED,
+            veto_deadline=now + timedelta(hours=VETO_WINDOW_HOURS),
+        )
+
+    # No veto — complete immediately.
+    return replace(record, status=TradeStatus.COMPLETED)
+
+
+def reject_trade(record: TradeRecord) -> TradeRecord:
+    """Receiver rejects the trade proposal.
+
+    Args:
+        record: The current TradeRecord (must be PENDING).
+
+    Returns:
+        Updated TradeRecord in REJECTED status.
+
+    Raises:
+        TradeInvalidStatusError: If the trade is not in PENDING status.
+    """
+    if record.status != TradeStatus.PENDING:
+        raise TradeInvalidStatusError(
+            f"Cannot reject a trade in status '{record.status}'. "
+            "Only PENDING trades can be rejected."
+        )
+    return replace(record, status=TradeStatus.REJECTED)
+
+
+def cancel_trade(record: TradeRecord, requester_id: str) -> TradeRecord:
+    """Proposer cancels their own trade proposal before it is answered.
+
+    Only the proposer can cancel. Only PENDING trades can be cancelled.
+
+    Args:
+        record: The current TradeRecord (must be PENDING).
+        requester_id: The member UUID requesting the cancellation.
+
+    Returns:
+        Updated TradeRecord in CANCELLED status.
+
+    Raises:
+        TradeInvalidStatusError: If the trade is not in PENDING status,
+            or if the requester is not the proposer.
+    """
+    if record.status != TradeStatus.PENDING:
+        raise TradeInvalidStatusError(
+            f"Cannot cancel a trade in status '{record.status}'. "
+            "Only PENDING trades can be cancelled."
+        )
+    if requester_id != record.proposer_id:
+        raise TradeInvalidStatusError(
+            f"Only the proposer ({record.proposer_id}) can cancel a trade. "
+            f"Requester was {requester_id}."
+        )
+    return replace(record, status=TradeStatus.CANCELLED)
+
+
+def commissioner_veto(
+    record: TradeRecord,
+    commissioner_id: str,
+    league_commissioner_id: str,
+    reason: str,
+    now: datetime,
+) -> TradeRecord:
+    """Commissioner blocks an accepted trade within the 24h veto window.
+
+    CDC §9.2: the commissioner must provide a reason (free-text). The veto
+    is logged with a timestamp. The log is visible to all managers.
+
+    Args:
+        record: The current TradeRecord (must be ACCEPTED).
+        commissioner_id: The member UUID attempting the veto.
+        league_commissioner_id: The actual commissioner of the league
+            (used to verify identity).
+        reason: Mandatory free-text reason for the veto.
+        now: Current UTC datetime (injected for testability).
+
+    Returns:
+        Updated TradeRecord in VETOED status, with veto_reason and veto_at set.
+
+    Raises:
+        TradeInvalidStatusError: If trade is not ACCEPTED, or requester
+            is not the commissioner.
+        TradeVetoNotEnabledError: If veto is not enabled on this league.
+        TradeVetoWindowExpiredError: If the 24h veto window has passed.
+        TradeVetoReasonRequiredError: If reason is empty or whitespace-only.
+    """
+    if not record.veto_enabled:
+        raise TradeVetoNotEnabledError(
+            "Commissioner veto is not enabled for this league."
+        )
+
+    if record.status != TradeStatus.ACCEPTED:
+        raise TradeInvalidStatusError(
+            f"Cannot veto a trade in status '{record.status}'. "
+            "Only ACCEPTED trades can be vetoed."
+        )
+
+    if commissioner_id != league_commissioner_id:
+        raise TradeInvalidStatusError(
+            f"Only the league commissioner ({league_commissioner_id}) can veto trades. "
+            f"Requester was {commissioner_id}."
+        )
+
+    if not reason or not reason.strip():
+        raise TradeVetoReasonRequiredError(
+            "A reason is required when vetoing a trade (CDC §9.2)."
+        )
+
+    if record.veto_deadline is not None and now > record.veto_deadline:
+        raise TradeVetoWindowExpiredError(
+            f"Veto window expired at {record.veto_deadline.isoformat()}. "
+            "The trade will be completed automatically."
+        )
+
+    return replace(
+        record,
+        status=TradeStatus.VETOED,
+        veto_reason=reason.strip(),
+        veto_at=now,
+    )
+
+
+def complete_trade(record: TradeRecord, now: datetime) -> TradeRecord:
+    """Mark an ACCEPTED trade as COMPLETED after the veto window expires.
+
+    This is called by trade_service when polling for trades whose veto
+    deadline has passed without commissioner action.
+
+    Args:
+        record: The current TradeRecord (must be ACCEPTED).
+        now: Current UTC datetime (injected for testability).
+
+    Returns:
+        Updated TradeRecord in COMPLETED status.
+
+    Raises:
+        TradeInvalidStatusError: If trade is not ACCEPTED.
+        TradeVetoWindowExpiredError: If the veto window has NOT yet expired
+            (called too early — trade_service should not call this yet).
+    """
+    if record.status != TradeStatus.ACCEPTED:
+        raise TradeInvalidStatusError(
+            f"Cannot complete a trade in status '{record.status}'. "
+            "Only ACCEPTED trades can be completed."
+        )
+
+    if record.veto_deadline is not None and now <= record.veto_deadline:
+        raise TradeVetoWindowExpiredError(
+            f"Veto window has not yet expired (deadline: "
+            f"{record.veto_deadline.isoformat()}). Cannot complete early."
+        )
+
+    return replace(record, status=TradeStatus.COMPLETED)

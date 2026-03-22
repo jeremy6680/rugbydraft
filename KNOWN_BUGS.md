@@ -115,6 +115,21 @@ Phase 4.
 
 ---
 
+## KB-006 — \_apply_completed_trade() is not atomic
+
+**Status:** Known / acceptable for V1
+**Affects:** `trade_service._apply_completed_trade()`
+
+Multiple sequential Supabase writes (one per player entry) are not wrapped
+in a single PostgreSQL transaction. A failure mid-way would leave some
+players transferred and others not.
+
+**Fix:** Implement a PostgreSQL RPC function `apply_completed_trade(trade_id)`
+that wraps all roster_slots updates in a single transaction. Deferred to
+Phase 4 alongside KB-004 (waiver atomic fix).
+
+---
+
 ## LIMITATION-001 — FastAPI restart mid-draft causes full state loss
 
 **Discovered:** 2026-03-21

@@ -65,13 +65,20 @@ backend/
 │   │   ├── __init__.py
 │   │   ├── health.py          # GET /health — liveness probe (public, no JWT)
 │   │   ├── lineup.py          # 4 endpoints: GET/PUT lineup, PATCH captain/kicker
+│   │   ├── trades.py          # 8 endpoints: POST /trades, GET /trades/{id},
+│   │   │                      # GET /leagues/{league_id}/trades,
+│   │   │                      # POST /{id}/accept, POST /{id}/reject,
+│   │   │                      # POST /{id}/cancel, POST /{id}/veto,
+│   │   │                      # POST /complete-expired (cron internal)
 │   │   ├── waivers.py         # 4 endpoints: POST/GET claims, DELETE cancel, POST process
 │   │   ├── draft.py           # POST /connect, POST /disconnect, GET /state
 │   │   └── draft_assisted.py  # POST /assisted/enable, POST /assisted/pick
 │   │                          # GET /assisted/log — commissioner-only (403 if not)
 │   ├── services/
 │   │   ├── lineup_service.py  # Business logic: lock validation, IR exclusion, multi-position, CDC 6.6 edge cases
-│   │   └── waiver_service.py  # Waiver I/O: submit, cancel, list, process cycle
+│   │   ├── waiver_service.py  # Waiver I/O: submit, cancel, list, process cycle
+│   │   └── trade_service.py   # Trade I/O: create, accept, reject, cancel,
+│   │                          # veto, complete_expired, get, list
 │   ├── schemas/
 │   │ ├── **init**.py
 │   │ └── draft.py             # Pydantic response models for draft endpoints (D-025)
@@ -125,6 +132,22 @@ backend/
 │   └── registry.py          # DraftRegistry — thread-safe dict league_id → DraftEngine
 │                            # Stored as app.state.draft_registry (FastAPI lifespan)
 │                            # register(), get(), remove(), active_league_ids()
+├── trades/
+│   ├── __init__.py          # Trade system package marker
+│   ├── window.py            # Pure: trade window open/closed check
+│   │                        # TradeWindowContext, is_trade_window_open(),
+│   │                        # midseason_cutoff_round() — double check date + round
+│   ├── validate_trade.py    # Pure: 7-rule proposal validation
+│   │                        # TradeParty, TradeProposal, validate_trade()
+│   │                        # Typed exceptions: TradeWindowClosedError,
+│   │                        # TradeSelfTradeError, TradeGhostTeamError,
+│   │                        # TradeFormatError, TradeOwnershipError,
+│   │                        # TradeDuplicatePlayerError, TradeIRBlockError
+│   └── processor.py         # Pure: state machine for all trade transitions
+│                            # TradeRecord, TradePlayerEntry, TradeStatus
+│                            # propose_trade(), accept_trade(), reject_trade()
+│                            # cancel_trade(), commissioner_veto(), complete_trade()
+│                            # VETO_WINDOW_HOURS = 24
 ├── waivers/
 │   ├── __init__.py          # Waiver system package marker
 │   ├── window.py            # Pure: waiver window open/closed (Tue 07:00 → Wed 23:59:59)
@@ -138,6 +161,8 @@ backend/
 │   ├── test_reconnection.py # 4 tests — reconnection protocol (D-025)
 │   │                        # reconnect during own turn, after timer expired,
 │   │                        # while other manager picks, GET state no side effects
+│   ├── test_trades.py       # 59 tests — window, validation (7 rules),
+│   │                        # processor (all state transitions)
 │   └── draft/
 │       ├── __init__.py              # Draft tests package marker
 │       ├── test_snake_order.py      # 33 unit tests for snake_order.py

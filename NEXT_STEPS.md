@@ -214,11 +214,11 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 
 ### Trades
 
-- [ ] Trade window: start of competition → mid-season (`ceil(total_rounds / 2)`)
-- [ ] Formats: 1v1, 1v2, 1v3
-- [ ] Commissioner veto: 24h window, must provide reason (text field), log visible to all
-- [ ] Trade blocking rule: same as waivers (unintegrated IR player)
-- [ ] Trades blocked after mid-season
+- [x] Trade window: start of competition → mid-season (`ceil(total_rounds / 2)`)
+- [x] Formats: 1v1, 1v2, 1v3 (symmetric — each side sends 1, 2, or 3 players)
+- [x] Commissioner veto: 24h window, must provide reason (text field), log visible to all
+- [x] Trade blocking rule: same as waivers (unintegrated IR player)
+- [x] Trades blocked after mid-season
 
 ### Infirmary rules
 
@@ -233,7 +233,7 @@ If no affordable provider found → implement simplified scoring (tries, kicker 
 - [x] Edge case: double match in same round
 - [x] Waiver priority ordering
 - [x] Waiver block: IR player not reintegrated
-- [ ] Trade window enforcement (mid-season cutoff)
+- [x] Trade window enforcement (mid-season cutoff)
 - [ ] Atomic commit: simulate pipeline failure mid-run, verify production data unchanged
 
 ---
@@ -316,5 +316,5 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 ## Immediate next actions
 
 **→ Phase 0 (parallel):** await responses from Statscore and DSG.
-**→ Phase 3 (current):** Waivers — waiver window, priority ordering, IR blocking rule.
+**→ Phase 3 (current):** Infirmary rules
 **→ Phase 1 — remaining:** Cron Coolify config (after first deploy to Hetzner).

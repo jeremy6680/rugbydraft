@@ -1240,3 +1240,49 @@ zoneinfo.ZoneInfo("Europe/Paris") handles DST automatically.
   future phase if needed.
 - The scheduler (Cron Coolify) must be configured in Europe/Paris timezone
   to match this window.
+
+---
+
+## D-035 — Trade format: symmetric 1-3 players per side
+
+**Date:** 2026-03-22
+**Status:** Accepted
+
+**Context:** CDC §9.2 states "1 joueur contre 1, 2 ou 3 joueurs". This was
+initially misread as "proposer always sends exactly 1 player". The intended
+meaning (confirmed by the product owner) is symmetric: each side sends
+1, 2, or 3 players.
+
+**Decision:** Both proposer and receiver send between 1 and 3 players.
+Valid formats: 1v1, 1v2, 1v3, 2v1, 2v2, 2v3, 3v1, 3v2, 3v3.
+
+**Rationale:** Consistent with fantasy US apps (ESPN, Sleeper) which
+inspired the trade mechanic. A 2v2 or 3v1 trade is a legitimate strategy.
+
+**Consequences:** `_check_format()` in `validate_trade.py` validates
+both sides symmetrically.
+
+---
+
+## D-036 — Trade veto audit: veto_at + veto_reason columns on trades table
+
+**Date:** 2026-03-22
+**Status:** Accepted
+
+**Context:** CDC §9.2 requires the commissioner veto to be logged with a
+reason visible to all managers. The question was whether to use a separate
+audit table or columns on the existing `trades` table.
+
+**Decision:** Add `veto_reason TEXT` and `veto_at TIMESTAMPTZ` directly
+to the `trades` table (migration 004). Also add `cancelled_at` and
+`completed_at` for full transition traceability.
+
+**Rationale:** Trade volume is low (at most a few dozen per league per
+season). A separate audit table would be overkill. All transition data
+fits cleanly on a single row. The log page queries one table with no joins.
+
+**Consequences:**
+
+- Migration 004 adds 4 columns to `trades` via ALTER TABLE.
+- `TradeRecord` (processor) carries these fields in memory.
+- `trade_service._update_trade_status()` persists them on each transition.

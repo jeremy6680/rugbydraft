@@ -1325,7 +1325,7 @@ player-level stats for Six Nations + Top 14 at indie startup pricing.
 ## D-038 — Scoring system revision following DSG coverage mapping
 
 **Date:** 2026-03-23
-**Status:** Accepted
+**Status:** Superseded by D-039 (2026-03-23)
 
 **Context:** Phase 0 DSG validation confirmed which stats are available.
 Two stats from the original scoring system (CDC v3.1 section 6) are absent from DSG.
@@ -1360,3 +1360,80 @@ from API response on low-activity matches).
 
 **Files impacted:** `dbt/models/gold/mart_fantasy_points.sql`,
 `CONTEXT.md` (scoring summary section), `docs/cdc_v31.md` (section 6).
+
+---
+
+---
+
+## D-039 — Scoring system final revision (supersedes D-038)
+
+**Date:** 2026-03-23
+**Status:** Accepted
+
+**Context:** After full analysis of the DSG raw XML response (match 3798425,
+Clermont vs Toulouse), several scoring rules from D-038 required further
+revision: missing DSG fields confirmed absent, new fields discovered,
+and game-design adjustments made to balance positional identity.
+
+**Changes from D-038:**
+
+Removed:
+
+- Offload (+1) — `offloads` field absent from DSG `player_stats` node
+- Drop goal (+3) — `try_kicks` confirmed as kick assist, not drop goal
+- Conversion missed (-0.5) — no `goals_attempted` field in DSG; missed kicks cannot be calculated
+- Penalty missed (-1) — same reason as above
+
+Added:
+
+- Kick assist (+1) — `try_kicks` field confirmed as kick leading directly to a try
+- Lineout lost (-0.5) — `lineouts_lost` field present in DSG schema (COALESCE — may be empty)
+- Turnovers conceded (-0.5) — `turnovers_conceded` field confirmed present
+
+Revised values:
+
+- Turnover won: +2 (confirmed, was ambiguous in D-038)
+- Line break: +1 (was +0.5 in D-038 — increased for positional differentiation)
+- Penalty kick made: formula revised — `goals - conversion_goals` gives penalty
+  kicks made (DSG `goals` = all successful kicks at goal)
+
+Revised rules:
+
+- Lineout won/lost: attributed to the **thrower** (any position), not restricted
+  to starting hooker. DSG already attributes `lineouts_won`/`lineouts_lost` to
+  the throwing player. A quick throw by a back is legitimately credited.
+
+**Final scoring table:**
+
+| Action                | Points | DSG field                 | Applies to            |
+| --------------------- | ------ | ------------------------- | --------------------- |
+| Metre carried (per m) | +0.1   | carries_metres            | All                   |
+| Try scored            | +5     | scores (event type="try") | All                   |
+| Try assist            | +2     | try_assists               | All                   |
+| Turnover won          | +2     | turnover_won              | All                   |
+| Line break            | +1     | line_breaks               | All                   |
+| Kick assist           | +1     | try_kicks                 | All                   |
+| Catch from kick       | +0.5   | catch_from_kick           | All                   |
+| Tackle                | +0.5   | tackles                   | All                   |
+| Lineout won           | +1     | lineouts_won              | Thrower (all)         |
+| Lineout lost          | -0.5   | lineouts_lost             | Thrower (all)         |
+| Turnovers conceded    | -0.5   | turnovers_conceded        | All                   |
+| Missed tackle         | -0.5   | missed_tackles            | All                   |
+| Handling error        | -0.5   | handling_error            | All                   |
+| Penalty conceded      | -1     | penalties_conceded        | All                   |
+| Yellow card           | -2     | bookings (yellow_card)    | All                   |
+| Red card              | -3     | bookings (red_card)       | All                   |
+| Conversion made       | +2     | conversion_goals          | Kicker only           |
+| Penalty kick made     | +3     | goals - conversion_goals  | Kicker only           |
+| Captain multiplier    | ×1.5   | —                         | Captain (nearest 0.5) |
+
+Conditional stats (COALESCE to 0 if absent from API response):
+`line_breaks`, `catch_from_kick`, `lineouts_won`, `lineouts_lost`,
+`try_kicks`, `handling_error`, `turnovers_conceded`
+
+**Files impacted:**
+
+- `dbt_project/models/gold/mart_fantasy_points.sql`
+- `CONTEXT.md` (scoring summary section)
+- `docs/dsg_api_reference.md` (section 6 — field mapping)
+- `docs/cdc_v31.md` (section 6 — scoring rules)

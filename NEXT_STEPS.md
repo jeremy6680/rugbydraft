@@ -1,7 +1,7 @@
 # NEXT_STEPS.md — RugbyDraft
 
-> Current status: Phase 3 in progress — Gold pipeline complete. Airflow DAG next.
-> Last updated: 2026-03-22
+> Current status: Phase 3 complete — scoring system v2 finalized. Ready for Phase 4.
+> Last updated: 2026-03-23
 
 ---
 
@@ -316,5 +316,15 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 
 ## Immediate next actions
 
-**→ Deferred integration tests (Phase 4)**
-**→ Phase 1 — remaining:** Cron Coolify config (after first deploy to Hetzner).
+**→ Phase 1 remaining:** implement `connectors/dsg.py` (see KB-008)
+
+- HTTP Basic Auth + authkey query param
+- `get_fixtures()` → `get_matches?type=season`
+- `get_match_results()` → `get_matches_updates`
+- `get_player_stats()` → `get_matches?type=match&detailed=yes`
+- Parse JSON response, map DSG fields → `PlayerMatchStats` (D-039)
+- Unit tests on parser with mock DSG response
+
+**→ Phase 1 remaining:** Cron Coolify config (after first deploy to Hetzner)
+
+**→ Phase 4:** all deferred integration tests (KB-004, KB-006, KB-007)

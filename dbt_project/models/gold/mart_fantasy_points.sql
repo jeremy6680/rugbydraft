@@ -8,21 +8,25 @@
 --
 -- Join chain:
 --   weekly_lineups (roster_id, player_id, round_id)
---   → players (uuid → external_id)              [D-031]
+--   → players (uuid → external_id)                          [D-031]
 --   → pipeline_stg_match_stats (player_external_id)
---   → pipeline_stg_matches (match_external_id → kickoff_utc, round dedup)
+--   → pipeline_stg_matches (match_external_id → kickoff_utc)
 --   → competition_rounds (round_id resolution)
 --
--- Key rules (CDC section 10):
+-- Key rules (CDC section 10 + D-039):
 --   - Kicker-only stats multiplied by is_kicker::int (0 or 1)
 --   - Double match same round: only first match (earliest kickoff_utc) scores
 --   - Captain: CEIL(raw * 1.5 * 2) / 2.0  → rounds UP to nearest 0.5
---   - COALESCE on all stats — safe for missing provider data
+--   - COALESCE on all conditional stats — safe for missing provider data
+--   - tries, yellow_cards, red_cards: resolved by the DSG connector and
+--     stored flat in pipeline_stg_match_stats (no separate event tables)
+--   - penalties_made = goals - conversion_goals (DSG field semantics)
 --
--- Silver column names (actual, from DESCRIBE):
---   match_external_id, player_external_id, metres_carried, fifty_twentytwo,
---   turnovers_won, penalties_conceded, is_first_match_of_round
+-- Conditional stats (COALESCE to 0 if absent from API response):
+--   line_breaks, catch_from_kick, lineouts_won, lineouts_lost,
+--   kick_assists, handling_errors, turnovers_conceded
 --
+-- Scoring system: v2 — see DECISIONS.md D-039
 -- Materialized as: table (target: prod)
 -- =============================================================================
 
@@ -30,12 +34,15 @@
     config(
         materialized='table',
         description='Fantasy points per starter per round. Captain x1.5, '
-                    'kicker-only stats, double-match dedup (CDC 6.6).'
+                    'kicker-only stats, double-match dedup (CDC 6.6). '
+                    'Scoring system v2 — D-039.'
     )
 }}
 
+-- ---------------------------------------------------------------------------
 -- Step 1: resolve player external_id → UUID from PostgreSQL players table.
--- This is the bridge between silver (external IDs) and PG (UUIDs) — D-031.
+-- Bridge between silver (external IDs) and PG (UUIDs) — D-031.
+-- ---------------------------------------------------------------------------
 with player_id_map as (
 
     select
@@ -46,7 +53,10 @@ with player_id_map as (
 
 ),
 
--- Step 2: resolve match external_id → round_id via real_matches + competition_rounds.
+-- ---------------------------------------------------------------------------
+-- Step 2: resolve match external_id → round_id via real_matches.
+-- kickoff_utc is used for double-match deduplication ordering.
+-- ---------------------------------------------------------------------------
 match_round_map as (
 
     select
@@ -54,8 +64,6 @@ match_round_map as (
         rm.id                   as match_uuid,
         rm.competition_round_id as round_id,
         cr.round_number,
-        -- kickoff_utc comes from the silver pipeline_stg_matches export.
-        -- We need it here for double-match deduplication ordering.
         sm.kickoff_utc
     from {{ source('postgres', 'real_matches') }} rm
     inner join {{ source('postgres', 'competition_rounds') }} cr
@@ -66,9 +74,14 @@ match_round_map as (
 
 ),
 
+-- ---------------------------------------------------------------------------
 -- Step 3: join match stats with resolved IDs.
--- is_first_match_of_round is pre-computed in the silver model — use it
--- directly instead of recomputing ROW_NUMBER here.
+-- tries, yellow_cards, red_cards come flat from pipeline_stg_match_stats —
+-- the DSG connector resolves them from scores/bookings event nodes before
+-- writing to data/raw/player_stats.json (see connectors/base.py D-039).
+-- is_first_match_of_round is pre-computed in silver (CDC 6.6).
+-- penalties_made = goals - conversion_goals (DSG field semantics).
+-- ---------------------------------------------------------------------------
 resolved_stats as (
 
     select
@@ -78,27 +91,34 @@ resolved_stats as (
         mrm.kickoff_utc,
         ms.is_first_match_of_round,
 
-        -- Attack stats
-        coalesce(ms.tries, 0)               as tries,
-        coalesce(ms.metres_carried, 0)      as metres_carried,
-        coalesce(ms.offloads, 0)            as offloads,
-        coalesce(ms.try_assists, 0)         as try_assists,
-        coalesce(ms.drop_goals, 0)          as drop_goals,
-        coalesce(ms.conversions_made, 0)    as conversions_made,
-        coalesce(ms.conversions_missed, 0)  as conversions_missed,
-        coalesce(ms.penalties_made, 0)      as penalties_made,
-        coalesce(ms.penalties_missed, 0)    as penalties_missed,
-        -- fifty_twentytwo: column name in silver (no underscore between 20 and 22)
-        coalesce(ms.fifty_twentytwo, 0)     as fifty_twentytwo,
+        -- Attack
+        coalesce(ms.tries, 0)                           as tries,
+        coalesce(ms.metres_carried, 0)                  as metres_carried,
+        coalesce(ms.try_assists, 0)                     as try_assists,
+        coalesce(ms.kick_assists, 0)                    as kick_assists,
+        -- Conditional attack stats
+        coalesce(ms.line_breaks, 0)                     as line_breaks,
+        coalesce(ms.catch_from_kick, 0)                 as catch_from_kick,
+        -- Kicker stats: penalties_made = goals - conversion_goals
+        coalesce(ms.conversion_goals, 0)                as conversions_made,
+        greatest(
+            coalesce(ms.goals, 0) - coalesce(ms.conversion_goals, 0),
+            0
+        )                                               as penalties_made,
 
-        -- Defence stats
-        coalesce(ms.tackles, 0)             as tackles,
-        coalesce(ms.dominant_tackles, 0)    as dominant_tackles,
-        coalesce(ms.turnovers_won, 0)       as turnovers_won,
-        coalesce(ms.lineout_steals, 0)      as lineout_steals,
-        coalesce(ms.penalties_conceded, 0)  as penalties_conceded,
-        coalesce(ms.yellow_cards, 0)        as yellow_cards,
-        coalesce(ms.red_cards, 0)           as red_cards
+        -- Defence
+        coalesce(ms.tackles, 0)                         as tackles,
+        coalesce(ms.turnovers_won, 0)                   as turnovers_won,
+        -- Conditional defence stats
+        coalesce(ms.lineouts_won, 0)                    as lineouts_won,
+        coalesce(ms.lineouts_lost, 0)                   as lineouts_lost,
+        coalesce(ms.turnovers_conceded, 0)              as turnovers_conceded,
+        coalesce(ms.missed_tackles, 0)                  as missed_tackles,
+        coalesce(ms.handling_errors, 0)                 as handling_errors,
+        coalesce(ms.penalties_conceded, 0)              as penalties_conceded,
+        -- Cards resolved by connector — stored flat in pipeline_stg_match_stats
+        coalesce(ms.yellow_cards, 0)                    as yellow_cards,
+        coalesce(ms.red_cards, 0)                       as red_cards
 
     from {{ source('postgres', 'pipeline_stg_match_stats') }} ms
     inner join player_id_map pid
@@ -107,58 +127,56 @@ resolved_stats as (
         on mrm.match_external_id = ms.match_external_id
 
     -- Only keep first match per player per round (CDC 6.6 double-match rule).
-    -- is_first_match_of_round is set by the silver model using ROW_NUMBER
-    -- partitioned by (player_external_id, round_number) ordered by kickoff_utc.
     where ms.is_first_match_of_round = true
 
 ),
 
+-- ---------------------------------------------------------------------------
 -- Step 4: join with weekly_lineups to get starter/captain/kicker context.
 -- Only starters score (slot_type = 'starter'). bench and ir excluded.
+-- Left join: starters with no match still appear with 0 points (bye week).
+-- ---------------------------------------------------------------------------
 lineup_stats as (
 
     select
         wl.roster_id,
         wl.round_id,
-        wl.player_id                        as player_uuid,
+        wl.player_id                                    as player_uuid,
         wl.is_captain,
         wl.is_kicker,
-        wl.is_kicker::integer               as kicker_flag,
-
-        -- Stats are NULL if the player had no match this round (bye week).
-        -- All COALESCE below guard against this.
+        wl.is_kicker::integer                           as kicker_flag,
         rs.match_uuid,
-        coalesce(rs.tries, 0)               as tries,
-        coalesce(rs.metres_carried, 0)      as metres_carried,
-        coalesce(rs.offloads, 0)            as offloads,
-        coalesce(rs.try_assists, 0)         as try_assists,
-        coalesce(rs.drop_goals, 0)          as drop_goals,
-        coalesce(rs.conversions_made, 0)    as conversions_made,
-        coalesce(rs.conversions_missed, 0)  as conversions_missed,
-        coalesce(rs.penalties_made, 0)      as penalties_made,
-        coalesce(rs.penalties_missed, 0)    as penalties_missed,
-        coalesce(rs.fifty_twentytwo, 0)     as fifty_twentytwo,
-        coalesce(rs.tackles, 0)             as tackles,
-        coalesce(rs.dominant_tackles, 0)    as dominant_tackles,
-        coalesce(rs.turnovers_won, 0)       as turnovers_won,
-        coalesce(rs.lineout_steals, 0)      as lineout_steals,
-        coalesce(rs.penalties_conceded, 0)  as penalties_conceded,
-        coalesce(rs.yellow_cards, 0)        as yellow_cards,
-        coalesce(rs.red_cards, 0)           as red_cards
+
+        coalesce(rs.tries, 0)                           as tries,
+        coalesce(rs.metres_carried, 0)                  as metres_carried,
+        coalesce(rs.try_assists, 0)                     as try_assists,
+        coalesce(rs.kick_assists, 0)                    as kick_assists,
+        coalesce(rs.line_breaks, 0)                     as line_breaks,
+        coalesce(rs.catch_from_kick, 0)                 as catch_from_kick,
+        coalesce(rs.conversions_made, 0)                as conversions_made,
+        coalesce(rs.penalties_made, 0)                  as penalties_made,
+        coalesce(rs.tackles, 0)                         as tackles,
+        coalesce(rs.turnovers_won, 0)                   as turnovers_won,
+        coalesce(rs.lineouts_won, 0)                    as lineouts_won,
+        coalesce(rs.lineouts_lost, 0)                   as lineouts_lost,
+        coalesce(rs.turnovers_conceded, 0)              as turnovers_conceded,
+        coalesce(rs.missed_tackles, 0)                  as missed_tackles,
+        coalesce(rs.handling_errors, 0)                 as handling_errors,
+        coalesce(rs.penalties_conceded, 0)              as penalties_conceded,
+        coalesce(rs.yellow_cards, 0)                    as yellow_cards,
+        coalesce(rs.red_cards, 0)                       as red_cards
 
     from {{ source('postgres', 'weekly_lineups') }} wl
-
-    -- Left join: starters with no match still appear with 0 points (bye week).
     left join resolved_stats rs
         on rs.player_uuid = wl.player_id
         and rs.round_id   = wl.round_id
-
-    -- Only starters score fantasy points (CDC 6.5).
     where wl.slot_type = 'starter'
 
 ),
 
--- Step 5: calculate individual point components per scoring action.
+-- ---------------------------------------------------------------------------
+-- Step 5: calculate individual point components per scoring action (D-039).
+-- ---------------------------------------------------------------------------
 point_components as (
 
     select
@@ -169,115 +187,114 @@ point_components as (
         ls.is_kicker,
         ls.match_uuid,
 
-        -- Attack (CDC 10.1)
-        round(ls.metres_carried * 0.1, 2)              as metres_pts,
-        ls.offloads           * 1.0                    as offload_pts,
-        ls.try_assists        * 2.0                    as try_assist_pts,
-        ls.tries              * 5.0                    as try_pts,
-        ls.drop_goals         * 3.0                    as drop_goal_pts,
-        -- Kicker-only: multiply by kicker_flag (1 for kicker, 0 for others)
-        ls.conversions_made   * ls.kicker_flag * 2.0   as conversion_made_pts,
-        ls.conversions_missed * ls.kicker_flag * (-0.5) as conversion_missed_pts,
-        ls.penalties_made     * ls.kicker_flag * 3.0   as penalty_made_pts,
-        ls.penalties_missed   * ls.kicker_flag * (-1.0) as penalty_missed_pts,
-        -- Conditional: 0 if provider does not supply this stat
-        ls.fifty_twentytwo    * 2.0                    as fifty_twenty_pts,
+        -- Attack (D-039)
+        round(ls.metres_carried * 0.1, 2)               as metres_pts,
+        ls.tries              * 5.0                     as try_pts,
+        ls.try_assists        * 2.0                     as try_assist_pts,
+        ls.turnovers_won      * 2.0                     as turnover_won_pts,
+        ls.line_breaks        * 1.0                     as line_break_pts,
+        ls.kick_assists       * 1.0                     as kick_assist_pts,
+        ls.catch_from_kick    * 0.5                     as catch_from_kick_pts,
+        -- Kicker-only: multiplied by kicker_flag (1 for kicker, 0 for others)
+        ls.conversions_made   * ls.kicker_flag * 2.0    as conversion_made_pts,
+        ls.penalties_made     * ls.kicker_flag * 3.0    as penalty_made_pts,
 
-        -- Defence (CDC 10.2)
-        ls.tackles            * 0.5                    as tackle_pts,
-        ls.dominant_tackles   * 1.0                    as dominant_tackle_pts,
-        ls.turnovers_won      * 2.0                    as turnover_pts,
-        ls.lineout_steals     * 2.0                    as lineout_steal_pts,
-        ls.penalties_conceded * (-1.0)                 as penalty_conceded_pts,
-        ls.yellow_cards       * (-2.0)                 as yellow_card_pts,
-        ls.red_cards          * (-3.0)                 as red_card_pts
+        -- Defence (D-039)
+        ls.tackles            * 0.5                     as tackle_pts,
+        ls.lineouts_won       * 1.0                     as lineout_won_pts,
+        ls.lineouts_lost      * (-0.5)                  as lineout_lost_pts,
+        ls.turnovers_conceded * (-0.5)                  as turnover_conceded_pts,
+        ls.missed_tackles     * (-0.5)                  as missed_tackle_pts,
+        ls.handling_errors    * (-0.5)                  as handling_error_pts,
+        ls.penalties_conceded * (-1.0)                  as penalty_conceded_pts,
+        ls.yellow_cards       * (-2.0)                  as yellow_card_pts,
+        ls.red_cards          * (-3.0)                  as red_card_pts
 
     from lineup_stats ls
 
 ),
 
+-- ---------------------------------------------------------------------------
 -- Step 6: sum components, apply captain multiplier.
--- Captain formula (CDC 10.3): CEIL(raw * 1.5 * 2) / 2.0 → nearest 0.5 UP.
+-- Captain formula (CDC 10.3 + D-039):
+--   CEIL(raw_points * 1.5 * 2) / 2.0  → rounds UP to nearest 0.5
+-- ---------------------------------------------------------------------------
+scored as (
+
+    select
+        pc.*,
+        (
+            pc.metres_pts
+            + pc.try_pts
+            + pc.try_assist_pts
+            + pc.turnover_won_pts
+            + pc.line_break_pts
+            + pc.kick_assist_pts
+            + pc.catch_from_kick_pts
+            + pc.conversion_made_pts
+            + pc.penalty_made_pts
+            + pc.tackle_pts
+            + pc.lineout_won_pts
+            + pc.lineout_lost_pts
+            + pc.turnover_conceded_pts
+            + pc.missed_tackle_pts
+            + pc.handling_error_pts
+            + pc.penalty_conceded_pts
+            + pc.yellow_card_pts
+            + pc.red_card_pts
+        )::numeric(8, 2)                                as raw_points
+
+    from point_components pc
+
+),
+
 final_scores as (
 
     select
-        pc.roster_id,
-        pc.round_id,
-        pc.player_uuid                              as player_id,
-        pc.is_captain,
-        pc.is_kicker,
-        pc.match_uuid                               as match_id,
+        s.roster_id,
+        s.round_id,
+        s.player_uuid                                   as player_id,
+        s.is_captain,
+        s.is_kicker,
+        s.match_uuid                                    as match_id,
+        s.raw_points,
 
-        -- Raw points: sum of all components
-        (
-            pc.metres_pts + pc.offload_pts + pc.try_assist_pts
-            + pc.try_pts + pc.drop_goal_pts
-            + pc.conversion_made_pts + pc.conversion_missed_pts
-            + pc.penalty_made_pts + pc.penalty_missed_pts
-            + pc.fifty_twenty_pts
-            + pc.tackle_pts + pc.dominant_tackle_pts
-            + pc.turnover_pts + pc.lineout_steal_pts
-            + pc.penalty_conceded_pts
-            + pc.yellow_card_pts + pc.red_card_pts
-        )::numeric(8, 2)                            as raw_points,
+        case when s.is_captain then 1.5 else 1.0
+        end::numeric(3, 2)                              as captain_multiplier,
 
-        -- Captain multiplier stored for audit trail
-        case when pc.is_captain then 1.5 else 1.0
-        end::numeric(3, 2)                          as captain_multiplier,
-
-        -- Total points with captain rounding
         case
-            when pc.is_captain then
-                ceil((
-                    pc.metres_pts + pc.offload_pts + pc.try_assist_pts
-                    + pc.try_pts + pc.drop_goal_pts
-                    + pc.conversion_made_pts + pc.conversion_missed_pts
-                    + pc.penalty_made_pts + pc.penalty_missed_pts
-                    + pc.fifty_twenty_pts
-                    + pc.tackle_pts + pc.dominant_tackle_pts
-                    + pc.turnover_pts + pc.lineout_steal_pts
-                    + pc.penalty_conceded_pts
-                    + pc.yellow_card_pts + pc.red_card_pts
-                ) * 1.5 * 2) / 2.0
-            else (
-                    pc.metres_pts + pc.offload_pts + pc.try_assist_pts
-                    + pc.try_pts + pc.drop_goal_pts
-                    + pc.conversion_made_pts + pc.conversion_missed_pts
-                    + pc.penalty_made_pts + pc.penalty_missed_pts
-                    + pc.fifty_twenty_pts
-                    + pc.tackle_pts + pc.dominant_tackle_pts
-                    + pc.turnover_pts + pc.lineout_steal_pts
-                    + pc.penalty_conceded_pts
-                    + pc.yellow_card_pts + pc.red_card_pts
-            )
-        end::numeric(8, 2)                          as total_points,
+            when s.is_captain
+                then ceil(s.raw_points * 1.5 * 2) / 2.0
+            else s.raw_points
+        end::numeric(8, 2)                              as total_points,
 
-        -- Breakdown columns (for points_breakdown JSONB in fantasy_scores)
-        pc.metres_pts,
-        pc.offload_pts,
-        pc.try_assist_pts,
-        pc.try_pts,
-        pc.drop_goal_pts,
-        pc.conversion_made_pts,
-        pc.conversion_missed_pts,
-        pc.penalty_made_pts,
-        pc.penalty_missed_pts,
-        pc.fifty_twenty_pts,
-        pc.tackle_pts,
-        pc.dominant_tackle_pts,
-        pc.turnover_pts,
-        pc.lineout_steal_pts,
-        pc.penalty_conceded_pts,
-        pc.yellow_card_pts,
-        pc.red_card_pts
+        -- Breakdown columns (used to build points_breakdown JSONB in fantasy_scores)
+        s.metres_pts,
+        s.try_pts,
+        s.try_assist_pts,
+        s.turnover_won_pts,
+        s.line_break_pts,
+        s.kick_assist_pts,
+        s.catch_from_kick_pts,
+        s.conversion_made_pts,
+        s.penalty_made_pts,
+        s.tackle_pts,
+        s.lineout_won_pts,
+        s.lineout_lost_pts,
+        s.turnover_conceded_pts,
+        s.missed_tackle_pts,
+        s.handling_error_pts,
+        s.penalty_conceded_pts,
+        s.yellow_card_pts,
+        s.red_card_pts
 
-    from point_components pc
+    from scored s
 
 )
 
 select
     {{ dbt_utils.generate_surrogate_key(['roster_id', 'round_id', 'player_id']) }}
-                        as fantasy_score_id,
+                            as fantasy_score_id,
     roster_id,
     round_id,
     player_id,
@@ -288,19 +305,20 @@ select
     captain_multiplier,
     total_points,
     metres_pts,
-    offload_pts,
-    try_assist_pts,
     try_pts,
-    drop_goal_pts,
+    try_assist_pts,
+    turnover_won_pts,
+    line_break_pts,
+    kick_assist_pts,
+    catch_from_kick_pts,
     conversion_made_pts,
-    conversion_missed_pts,
     penalty_made_pts,
-    penalty_missed_pts,
-    fifty_twenty_pts,
     tackle_pts,
-    dominant_tackle_pts,
-    turnover_pts,
-    lineout_steal_pts,
+    lineout_won_pts,
+    lineout_lost_pts,
+    turnover_conceded_pts,
+    missed_tackle_pts,
+    handling_error_pts,
     penalty_conceded_pts,
     yellow_card_pts,
     red_card_pts

@@ -86,18 +86,23 @@ Points are calculated from real match stats via an external API. A premium featu
 
 ## Scoring system (summary)
 
-**Attack:** +0.1/metre carried, +1 offload, +2 try assist, +5 try, -0.5 handling error,
-+1 line break, +0.5 catch from kick, +3 drop goal (all players),
-+2 conversion made / -0.5 missed (kicker only), +3 penalty made / -1 missed (kicker only).
+**Attack:** +0.1/metre carried, +1 kick assist, +2 try assist, +5 try,
++1 line break, +0.5 catch from kick, +2 conversion made (kicker only),
++3 penalty kick made (kicker only).
 
-**Defence:** +0.5 tackle, +2 turnover, +1 lineout won, -1 penalty conceded, -2 yellow card, -3 red card.
+**Defence:** +0.5 tackle, +2 turnover won, +1 lineout won (thrower),
+-0.5 lineout lost (thrower), -0.5 missed tackle, -0.5 turnovers conceded,
+-0.5 handling error, -1 penalty conceded, -2 yellow card, -3 red card.
 
 **Captain:** ×1.5 multiplier (rounded up to nearest 0.5), applied after all points calculated.
 
-Conditional stats use `COALESCE(stat, 0)` in dbt — auto-activated on API upgrade.
+Conditional stats use `COALESCE(stat, 0)` in dbt:
+`line_breaks`, `catch_from_kick`, `lineouts_won`, `lineouts_lost`,
+`try_kicks`, `handling_error`, `turnovers_conceded`.
 
-> Provider confirmed: **Data Sports Group (DSG)** — €125/month for Six Nations + Top 14. Extra €100 for Super Rugby, Rugby Championship and Premiership.
-> All blocking stats validated on 2026-03-22. See DECISIONS.md D-012 and dsg_api_reference.md.
+> Provider confirmed: **Data Sports Group (DSG)** — €125/month for Six Nations + Top 14.
+> Extra €100/month for Super Rugby, Premiership, Champions Cup (V2).
+> Scoring system v2 finalized on 2026-03-23. See DECISIONS.md D-039 and docs/dsg_api_reference.md.
 
 ---
 
@@ -108,7 +113,7 @@ See `DECISIONS.md` for full rationale.
 - **FastAPI is the authority of state for the draft.** Supabase Realtime is a broadcast channel only.
 - **Airflow only for `post_match_pipeline`.** Daily tasks use Cron Coolify / APScheduler.
 - **Staging → atomic commit** for fantasy_scores: scores are written to `fantasy_scores_staging` first, then committed in a single PostgreSQL transaction.
-- **Rugby data source is TBD** (D-012). Architecture is connector-agnostic via `BaseRugbyConnector`. API-Sports ruled out — no player-level stats.
+- **Rugby data source is DSG** (D-037). Architecture is connector-agnostic via `BaseRugbyConnector`. API-Sports ruled out — no player-level stats. Scoring system v2 finalized — see D-039.
 - **next-intl from Phase 1**, FR only in V1 — zero hardcoded UI strings allowed.
 - **Language and competition access are independent dimensions.** Locale = display preference. Competitions = accessible by plan (Free/Pro), not by language.
 
@@ -118,11 +123,11 @@ See `DECISIONS.md` for full rationale.
 
 | Phase                       | Estimated duration | Status                                            |
 | --------------------------- | ------------------ | ------------------------------------------------- |
-| Phase 0 — API validation    | 3–5 days           | 🟡 In progress — provider search ongoing          |
-| Phase 1 — Foundations       | 2–3 weeks          | 🔴 Ready to start                                 |
-| Phase 2 — Draft engine      | 3–4 weeks          | 🔴 Not started                                    |
-| Phase 3 — Gameplay          | 2–3 weeks          | 🔴 Not started — requires confirmed data provider |
-| Phase 4 — Frontend MVP      | 3–4 weeks          | 🔴 Not started                                    |
+| Phase 0 — API validation    | 3–5 days           | ✅ Complete — DSG confirmed, scoring v2 finalized |
+| Phase 1 — Foundations       | 2–3 weeks          | ✅ Complete                                       |
+| Phase 2 — Draft engine      | 3–4 weeks          | ✅ Complete                                       |
+| Phase 3 — Gameplay          | 2–3 weeks          | ✅ Complete                                       |
+| Phase 4 — Frontend MVP      | 3–4 weeks          | 🟡 Ready to start                                 |
 | Phase 5 — Premium (private) | 2–3 weeks          | 🔴 Not started                                    |
 | Phase 6 — Top 14 & polish   | 2 weeks            | 🔴 Not started                                    |
 | Phase 7 — EN (V2)           | TBD                | 🔵 Future                                         |

@@ -145,18 +145,30 @@ class PlayerMatchStats(BaseModel):
     Individual player statistics for a single match.
     Used by post_match_pipeline to calculate fantasy points.
 
-    Scoring system (CDC section 10):
-        Attack: metres (+0.1/m), offloads (+1), try_assists (+2), tries (+5),
-                drop_goals (+3, all starters), conversions_made (+2, kicker only),
-                conversions_missed (-0.5, kicker only), penalties_made (+3, kicker only),
-                penalties_missed (-1, kicker only), fifty_twentytwo (+2, conditional)
-        Defence: tackles (+0.5), dominant_tackles (+1, conditional),
-                 turnovers_won (+2), lineout_steals (+2, conditional),
-                 penalties_conceded (-1), yellow_cards (-2), red_cards (-3)
+    Scoring system v2 (D-039):
+        Attack:  metres (+0.1/m), try_assists (+2), tries (+5),
+                 kick_assists (+1), line_breaks (+1),
+                 catch_from_kick (+0.5),
+                 conversions_made (+2, kicker only),
+                 penalties_made (+3, kicker only)
+        Defence: tackles (+0.5), turnovers_won (+2),
+                 lineouts_won (+1, thrower), lineouts_lost (-0.5, thrower),
+                 turnovers_conceded (-0.5), missed_tackles (-0.5),
+                 handling_errors (-0.5), penalties_conceded (-1),
+                 yellow_cards (-2), red_cards (-3)
 
-    Conditional stats (marked with comment) default to None when provider
-    does not supply them. dbt uses COALESCE(stat, 0) — they simply score 0.
-    Auto-activated on provider upgrade without any code change.
+    DSG field notes:
+        - tries: from DSG scores event node (type="try"), resolved by connector
+        - yellow_cards/red_cards: from DSG bookings node, resolved by connector
+        - goals: all successful kicks at goal (penalties + conversions)
+        - conversion_goals: conversions made only
+        - penalties_made derived in connector: goals - conversion_goals
+        - kick_assists: DSG field try_kicks (kick leading directly to a try)
+
+    Conditional stats (may be None if provider does not supply):
+        line_breaks, catch_from_kick, lineouts_won, lineouts_lost,
+        kick_assists, handling_errors, turnovers_conceded
+        → dbt uses COALESCE(stat, 0) — they score 0 if absent.
     """
 
     external_match_id: str
@@ -165,7 +177,7 @@ class PlayerMatchStats(BaseModel):
     team_id: str
     position_played: PositionType | None = Field(
         default=None,
-        description="Position actually played in this match (may differ from usual position)",
+        description="Position actually played in this match.",
     )
     minutes_played: int | None = None
 
@@ -176,29 +188,54 @@ class PlayerMatchStats(BaseModel):
         default=None,
         description="Metres carried with ball in hand. None if provider does not supply.",
     )
-    offloads: int | None = None
-    drop_goals: int = Field(default=0, ge=0)
+    # Conditional — COALESCE to 0 in dbt if None
+    kick_assists: int | None = Field(
+        default=None,
+        description="DSG try_kicks: kick leading directly to a try. +1 pt.",
+    )
+    line_breaks: int | None = Field(
+        default=None,
+        description="Line breaks made. +1 pt each.",
+    )
+    catch_from_kick: int | None = Field(
+        default=None,
+        description="Catches under kick. +0.5 pt each.",
+    )
 
-    # Kicker stats — scored only if player is designated kicker in the roster
+    # Kicker stats — scored only if player is designated kicker in the roster.
+    # Kicker designation is managed in FastAPI/PostgreSQL, not in dbt.
     conversions_made: int = Field(default=0, ge=0)
-    conversions_missed: int = Field(default=0, ge=0)
     penalties_made: int = Field(default=0, ge=0)
-    penalties_missed: int = Field(default=0, ge=0)
-
-    # Conditional — requires provider support (COALESCE to 0 in dbt if None)
-    fifty_twentytwo: int | None = None  # +2 if API supports it
 
     # --- Defence stats ---
-    tackles: int | None = None  # +0.5 each
-    dominant_tackles: int | None = None  # +1 each — conditional
-    turnovers_won: int | None = None  # +2 each
-    lineout_steals: int | None = None  # +2 each — conditional
-    penalties_conceded: int | None = None  # -1 each
-    yellow_cards: int = Field(default=0, ge=0)  # -2 each
-    red_cards: int = Field(default=0, ge=0)  # -3 each
+    tackles: int | None = None
+    turnovers_won: int | None = None
+    # Conditional — COALESCE to 0 in dbt if None
+    lineouts_won: int | None = Field(
+        default=None,
+        description="Lineouts won as thrower (any position). +1 pt each.",
+    )
+    lineouts_lost: int | None = Field(
+        default=None,
+        description="Lineouts lost as thrower (any position). -0.5 pt each.",
+    )
+    turnovers_conceded: int | None = Field(
+        default=None,
+        description="Turnovers conceded. -0.5 pt each.",
+    )
+    missed_tackles: int | None = Field(
+        default=None,
+        description="Missed tackles. -0.5 pt each.",
+    )
+    handling_errors: int | None = Field(
+        default=None,
+        description="Handling errors. -0.5 pt each.",
+    )
+    penalties_conceded: int | None = None
+    yellow_cards: int = Field(default=0, ge=0)
+    red_cards: int = Field(default=0, ge=0)
 
     # Edge case (CDC 6.6): player plays two matches in same round
-    # → only first match counts. Tracked here for pipeline deduplication.
     is_first_match_of_round: bool = Field(
         default=True,
         description=(

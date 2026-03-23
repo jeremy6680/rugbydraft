@@ -68,9 +68,8 @@ models:
         tests:
           - not_null
           - accepted_values:
-              config:
-                values:
-                  ["scheduled", "live", "finished", "postponed", "cancelled"]
+              values:
+                ["scheduled", "live", "finished", "postponed", "cancelled"]
 
   - name: stg_matches
     description: "Cleaned completed match results — finished matches only"
@@ -83,8 +82,7 @@ models:
         tests:
           - not_null
           - accepted_values:
-              config:
-                values: ["finished"]
+              values: ["finished"]
 
   - name: stg_players
     description: "Player reference data extracted from match stats"
@@ -101,12 +99,24 @@ models:
           - not_null
 
   - name: stg_match_stats
-    description: "Individual player stats per match — COALESCE applied on conditional stats"
+    description: >
+      Individual player stats per match — DSG field mapping (D-039).
+      Connector resolves provider-specific fields before writing JSON.
+      Conditional stats have COALESCE(stat, 0).
     columns:
       - name: match_external_id
         tests:
           - not_null
       - name: player_external_id
+        tests:
+          - not_null
+      - name: tackles
+        tests:
+          - not_null
+      - name: metres_carried
+        tests:
+          - not_null
+      - name: is_first_match_of_round
         tests:
           - not_null
 
@@ -121,6 +131,4 @@ models:
         tests:
           - not_null
           - accepted_values:
-              config:
-                values:
-                  ["fit", "injured", "suspended", "doubtful", "unavailable"]
+              values: ["fit", "injured", "suspended", "doubtful", "unavailable"]

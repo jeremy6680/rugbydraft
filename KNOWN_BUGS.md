@@ -16,6 +16,10 @@ for dbt 1.11.
 The warning fires incorrectly — tests pass (PASS=29).
 **Workaround:** None needed. Tests are valid and passing.
 **Fix:** Will resolve on dbt-core or dbt-duckdb upgrade.
+**Update 2026-03-23:** confirmed this bug produces invalid SQL (`not in ()`)
+in some dbt-duckdb versions, causing test failures — not just warnings.
+Fixed by removing the `config:` wrapper from all `accepted_values` tests
+in `schema.yml`. Use `values:` directly under `accepted_values:`.
 
 ---
 

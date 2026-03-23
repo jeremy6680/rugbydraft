@@ -9,5 +9,5 @@ dbt-duckdb==1.9.2
 # Required for gold models running against Supabase PostgreSQL (D-030)
 dbt-postgres==1.9.1
 
-# dbt utilities (cross-adapter macros)
-dbt-utils>=1.1,<2.0
+# Note: dbt-utils is a dbt package (not a pip package).
+# Installed via: dbt deps (reads dbt_project/packages.yml)

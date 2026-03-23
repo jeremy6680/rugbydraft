@@ -99,12 +99,10 @@ resolved_stats as (
         -- Conditional attack stats
         coalesce(ms.line_breaks, 0)                     as line_breaks,
         coalesce(ms.catch_from_kick, 0)                 as catch_from_kick,
-        -- Kicker stats: penalties_made = goals - conversion_goals
-        coalesce(ms.conversion_goals, 0)                as conversions_made,
-        greatest(
-            coalesce(ms.goals, 0) - coalesce(ms.conversion_goals, 0),
-            0
-        )                                               as penalties_made,
+        -- Kicker stats: delivered directly by connector (DSG derives
+        -- penalties_made = goals - conversion_goals before writing JSON)
+        coalesce(ms.conversions_made, 0)                as conversions_made,
+        coalesce(ms.penalties_made, 0)                  as penalties_made,
 
         -- Defence
         coalesce(ms.tackles, 0)                         as tackles,

@@ -239,7 +239,14 @@ connectors/
 ├── __init__.py
 ├── base.py          # BaseRugbyConnector ABC + PlayerMatchStats (scoring v2 — D-039)
 ├── mock.py          # MockRugbyConnector — realistic test data, scoring v2 fields
-└── requirements.txt # Connector dependencies (pydantic)
+├── dsg.py           # DSGConnector — XML parser, HTTP Basic Auth + authkey,
+│                    # 3-pass strategy: try_counts + card_map + player_stats
+│                    # penalties_made = goals - conversion_goals (computed here)
+│                    # position string → PositionType enum mapping
+└── requirements.txt # Connector dependencies (pydantic, httpx)
+└── tests/
+    ├── __init__.py
+    └── test_dsg_connector.py  # 33 unit tests — pure XML parsing, no HTTP
 ```
 
 | File               | Purpose                                                                      |
@@ -248,7 +255,7 @@ connectors/
 | `mock.py`          | Stub connector — updated with scoring v2 fields for test coverage            |
 | `requirements.txt` | Pinned dependencies for CI cache stability                                   |
 
-DSG connector (`connectors/dsg.py`) to be implemented — see KB-008.
+DSG connector (`connectors/dsg.py`) — implemented. See KB-008 (resolved).
 
 ---
 

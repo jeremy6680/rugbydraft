@@ -4,3 +4,6 @@
 
 # Pydantic v2 — used by BaseRugbyConnector models
 pydantic==2.11.1
+
+# HTTP client — used by DSGConnector (HTTP Basic Auth + XML fetch)
+httpx==0.28.1

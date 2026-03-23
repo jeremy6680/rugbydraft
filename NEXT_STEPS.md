@@ -65,6 +65,9 @@
 - [x] Bronze models: `raw_matches`, `raw_player_stats`, `raw_fixtures`, `raw_player_availability`
 - [x] Silver models: `stg_players`, `stg_matches`, `stg_match_stats`, `stg_fixtures`, `stg_player_availability`
 - [x] dbt tests on silver models (not_null, unique on key fields)
+- [x] `connectors/dsg.py` — DSGConnector: XML parser, HTTP Basic Auth,
+      penalties_made computed (goals - conversion_goals), cards joined
+      from bookings node, tries joined from scores node
 - [ ] Cron Coolify: `daily_fixtures` (06:00) and `daily_availability` (08:00)
 
 ### Backend skeleton
@@ -316,14 +319,12 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 
 ## Immediate next actions
 
-**→ Phase 1 remaining:** implement `connectors/dsg.py` (see KB-008)
+**→ Phase 1 remaining:** ~~implement `connectors/dsg.py` (see KB-008)~~ ✅ Done
 
-- HTTP Basic Auth + authkey query param
-- `get_fixtures()` → `get_matches?type=season`
-- `get_match_results()` → `get_matches_updates`
-- `get_player_stats()` → `get_matches?type=match&detailed=yes`
-- Parse JSON response, map DSG fields → `PlayerMatchStats` (D-039)
-- Unit tests on parser with mock DSG response
+- `connectors/dsg.py` — DSGConnector, XML parser, 3-pass strategy
+  (try_counts + card_map + player_stats iteration)
+- `connectors/tests/test_dsg_connector.py` — 33 tests passing
+- KB-008 resolved
 
 **→ Phase 1 remaining:** Cron Coolify config (after first deploy to Hetzner)
 

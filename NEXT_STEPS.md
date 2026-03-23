@@ -5,9 +5,10 @@
 
 ---
 
-## 🟡 Phase 0 — API Validation (in progress)
+## ✅ Phase 0 — API Validation (complete)
 
-**Status:** API-Sports tested and ruled out. Alternative providers under evaluation.
+**Status:** DSG confirmed as data provider. All blocking stats validated. Scoring system revised.
+**Last updated:** 2026-03-23
 
 ### Completed
 
@@ -18,22 +19,14 @@
 - [x] Investigated alternative providers (Sportradar, DSG, Statscore, stats.sixnationsrugby.com)
 - [x] Contacted Data Sports Group (DSG) — 2026-03-18
 - [x] Contacted Statscore — 2026-03-18, received initial reply, sent detailed requirements
-
-### Pending — provider selection
-
-- [ ] Await DSG response with pricing and data sample
-- [ ] Await Statscore response confirming player-level stat availability
-- [ ] If budget is confirmed feasible: request sandbox/trial access and run validation script against new provider
-- [ ] If all providers exceed budget: evaluate Sportradar 30-day free trial + simplified scoring system as fallback
-- [ ] Document final provider decision in `DECISIONS.md` D-012
-- [ ] Update cost estimates in CDC if provider cost differs from original ~12 €/month assumption
-
-### Decision rule (unchanged)
-
-If blocking stats (tackles, turnovers, metres, try assists) are confirmed available → proceed to Phase 3 with full scoring system.
-If no affordable provider found → implement simplified scoring (tries, kicker stats, cards) on API-Sports and document the tradeoff in DECISIONS.md.
-
-**Phase 0 does NOT block Phase 1.** Repos, schema, CI/CD, frontend skeleton, and draft engine are all independent of the data source choice.
+- [x] DSG trial activated — 2026-03-21 (2 weeks, Top 14 + player stats)
+- [x] Phase 0 validation script run on match 3798425 (Clermont vs Toulouse, Top 14 2025/26)
+- [x] **All blocking stats confirmed ✅ — see `docs/dsg_api_reference.md`**
+- [x] Scoring system revised for DSG coverage — see D-038
+- [x] Provider decision documented — D-037 (supersedes D-012)
+- [x] Cost model updated — break-even revised to ~100 paying subscribers (see D-037)
+- [x] `CONTEXT.md` scoring summary updated
+- [x] `docs/dsg_api_reference.md` created (gitignored — confidential)
 
 ---
 
@@ -323,6 +316,5 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 
 ## Immediate next actions
 
-**→ Phase 0 (parallel):** await responses from Statscore and DSG.
-**→ Phase 3 (current):** Infirmary rules
+**→ Deferred integration tests (Phase 4)**
 **→ Phase 1 — remaining:** Cron Coolify config (after first deploy to Hetzner).

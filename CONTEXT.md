@@ -17,34 +17,36 @@ Points are calculated from real match stats via an external API. A premium featu
 
 ## Business model
 
-| Plan   | Monthly   | Annual    | Access                                                                                                                                                    |
-| ------ | --------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Free   | 0 €       | 0 €       | International competitions (Six Nations, Rugby Championship, Nations Championship). Unlimited leagues as manager. Commissioner on 1 active league max.    |
-| Pro    | 2 €/month | 18 €/year | All Free + national/continental competitions (Top 14 V1, Premiership, Super Rugby, Champions Cup V2+). Unlimited commissioner leagues. 4-week free trial. |
-| Pro+IA | 3 €/month | 25 €/year | All Pro + CrewAI Staff IA on 1 league of choice (Tuesday + Thursday reports).                                                                             |
+| Plan     | Monthly      | Annual       | Access                                                                                                         |
+| -------- | ------------ | ------------ | -------------------------------------------------------------------------------------------------------------- |
+| Free     | 0 €          | 0 €          | Six Nations + Top 14. Unlimited leagues as manager. Commissioner on 1 active league max.                       |
+| Pro      | 2,99 €/month | 24,99 €/year | All Free + Rugby Championship, Premiership, Super Rugby Pacific. Unlimited commissioner leagues. 2-week trial. |
+| Pro + AI | 3,99 €/month | 34,99 €/year | All Pro + AI Coaching Staff on 1 league of choice (Tuesday + Thursday reports).                                |
 
-**Break-even:** ~28 Pro+IA subscribers (mix 40% monthly / 60% annual).
+**Break-even:** revised — see DECISIONS.md D-013 (DSG pricing impact).
 
-> **Note:** monthly data source cost estimate (originally ~12 €/month for API-Sports) needs revision once a provider is confirmed. See DECISIONS.md D-012.
+> DSG confirmed at €125/month (Six Nations + Top 14). V2 add-on: +€100/month for Rugby Championship, Premiership,
+> Super Rugby Pacific. This significantly raises the break-even threshold.
+> See financial validation below.
 
 ---
 
 ## Tech stack
 
-| Layer             | Technology                                                                                  |
-| ----------------- | ------------------------------------------------------------------------------------------- |
-| Frontend          | Next.js 15 (App Router) + Tailwind CSS v4 + shadcn/ui + Framer Motion                       |
-| i18n              | next-intl — V1 FR only, i18n-ready from Phase 1                                             |
-| Backend           | FastAPI (Python) — **authority of state for the draft**                                     |
-| Database          | PostgreSQL via Supabase cloud (Auth + Realtime WebSocket)                                   |
-| Realtime          | Supabase Realtime — broadcast channel only, not source of truth                             |
-| Data pipeline     | DuckDB + dbt Core (medallion: bronze/silver/gold)                                           |
-| Orchestration     | Airflow (post_match_pipeline only) + Cron Coolify (daily tasks)                             |
-| Rugby data source | **TBD** — see DECISIONS.md D-012. Connector-agnostic architecture via `BaseRugbyConnector`. |
-| AI Staff          | CrewAI + Claude API claude-sonnet-4-5 (private repo)                                        |
-| Payments          | Stripe — monthly cancellable or annual (private repo)                                       |
-| Infra             | Hetzner CPX21 (8 GB RAM) + Coolify + Docker Compose                                         |
-| CI/CD             | GitHub Actions — ruff + pytest + axe-core + TS lint                                         |
+| Layer             | Technology                                                            |
+| ----------------- | --------------------------------------------------------------------- |
+| Frontend          | Next.js 15 (App Router) + Tailwind CSS v4 + shadcn/ui + Framer Motion |
+| i18n              | next-intl — V1 FR only, i18n-ready from Phase 1                       |
+| Backend           | FastAPI (Python) — **authority of state for the draft**               |
+| Database          | PostgreSQL via Supabase cloud (Auth + Realtime WebSocket)             |
+| Realtime          | Supabase Realtime — broadcast channel only, not source of truth       |
+| Data pipeline     | DuckDB + dbt Core (medallion: bronze/silver/gold)                     |
+| Orchestration     | Airflow (post_match_pipeline only) + Cron Coolify (daily tasks)       |
+| Rugby data source | DSG                                                                   |
+| AI Staff          | CrewAI + Claude API claude-sonnet-4-5 (private repo)                  |
+| Payments          | Stripe — monthly cancellable or annual (private repo)                 |
+| Infra             | Hetzner CPX21 (8 GB RAM) + Coolify + Docker Compose                   |
+| CI/CD             | GitHub Actions — ruff + pytest + axe-core + TS lint                   |
 
 ---
 
@@ -61,19 +63,20 @@ Points are calculated from real match stats via an external API. A premium featu
 
 ## Competitions
 
-### V1 — Free (international)
+### V1 — Free
 
-- Six Nations (6 teams, 2–6 managers)
-- Rugby Championship (4 teams, 2–4 managers) — _if confirmed provider covers it_
-- Nations Championship (12+ teams, 2–12 managers) — _if confirmed provider covers it_
+- Six Nations (international, 6 teams, 2–6 managers)
+- Top 14 (club, 14 teams, 2–14 managers)
 
-### V1 — Pro (club)
+### V2 — Pro
 
-- Top 14 (phase régulière)
+- Super Rugby (club, 11 teams, 2-10 managers)
+- Rugby Championship (international, 4 teams, 2–4 managers)
+- Premiership (club, 10 teams, 2-4 managers)
 
-### V2 — Pro (club)
+### V2 — Pro + AI
 
-- Premiership, Champions Cup, Super Rugby Pacific
+- No other competition
 
 **Architecture:** `competition_type` = `international` (nationality constraint) or `club` (club constraint). Adding a competition never requires modifying business logic.
 
@@ -83,15 +86,18 @@ Points are calculated from real match stats via an external API. A premium featu
 
 ## Scoring system (summary)
 
-**Attack:** +0.1/metre, +1 offload, +2 try assist, +5 try, +3 drop (all starters), +2 conversion made / -0.5 missed (kicker only), +3 penalty made / -1 missed (kicker only), +2 50/22 (if API).
+**Attack:** +0.1/metre carried, +1 offload, +2 try assist, +5 try, -0.5 handling error,
++1 line break, +0.5 catch from kick, +3 drop goal (all players),
++2 conversion made / -0.5 missed (kicker only), +3 penalty made / -1 missed (kicker only).
 
-**Defence:** +0.5 tackle, +1 dominant tackle (if API), +2 turnover, +2 lineout steal (if API), -1 penalty conceded, -2 yellow card, -3 red card.
+**Defence:** +0.5 tackle, +2 turnover, +1 lineout won, -1 penalty conceded, -2 yellow card, -3 red card.
 
 **Captain:** ×1.5 multiplier (rounded up to nearest 0.5), applied after all points calculated.
 
 Conditional stats use `COALESCE(stat, 0)` in dbt — auto-activated on API upgrade.
 
-> If no provider with full player stats is found at an affordable price, a simplified scoring system (tries, kicker stats, cards only) will be documented as a fallback in DECISIONS.md before Phase 3.
+> Provider confirmed: **Data Sports Group (DSG)** — €125/month for Six Nations + Top 14. Extra €100 for Super Rugby, Rugby Championship and Premiership.
+> All blocking stats validated on 2026-03-22. See DECISIONS.md D-012 and dsg_api_reference.md.
 
 ---
 

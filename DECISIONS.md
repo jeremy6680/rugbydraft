@@ -257,7 +257,7 @@
 ## D-012 — Data source strategy: connector-agnostic architecture, provider TBD
 
 **Date:** 2026-03-18
-**Status:** Accepted — provider selection pending
+**Status:** Superseded by D-037 (2026-03-23) — DSG confirmed, provider selection closed.
 
 **Context:** API-Sports Rugby failed Phase 0 validation (no player-level stats). A new provider must be selected before Phase 3 (gameplay/scoring pipeline). Phase 1 and Phase 2 can proceed without a confirmed provider.
 
@@ -1286,3 +1286,77 @@ fits cleanly on a single row. The log page queries one table with no joins.
 - Migration 004 adds 4 columns to `trades` via ALTER TABLE.
 - `TradeRecord` (processor) carries these fields in memory.
 - `trade_service._update_trade_status()` persists them on each transition.
+
+---
+
+## D-037 — DSG confirmed as data provider (resolution of D-012)
+
+**Date:** 2026-03-23
+**Status:** Accepted
+
+**Context:** D-012 left the provider selection open pending validation.
+Phase 0 validation was completed on 2026-03-22 using DSG match 3798425
+(Clermont vs Toulouse, Top 14 2025/26). All blocking stats confirmed.
+D-012 status is now: Superseded by D-037.
+
+**Decision:** Data Sports Group (DSG) is the confirmed provider for RugbyDraft V1.
+
+| Property   | Value                                                 |
+| ---------- | ----------------------------------------------------- |
+| Base URL   | https://dsg-api.com/clients/jeremym/rugby/            |
+| V1 price   | €125/month — Six Nations + Top 14                     |
+| V2 add-on  | +€100/month — Premiership, Super Rugby, Champions Cup |
+| Trial      | 2 weeks (activated 2026-03-21)                        |
+| Rate limit | 10,000 calls/hour — no management needed in V1        |
+| Contact    | Rajesh D'Souza — rajesh@datasportsgroup.com           |
+
+**Impact on cost model:** Fixed infrastructure costs rise from ~€30/month to ~€143/month.
+Break-even threshold revised to ~100 paying subscribers (mix 70% Pro / 30% Pro+AI).
+Ulule campaign target revised to €3,000 minimum (18 months runway at zero subscribers).
+V2 competitions will only be activated when subscriber base justifies +€100/month add-on
+(estimated threshold: ~160 paying subscribers).
+
+**Rationale:** No alternative at an accessible price point. Statscore: €1,000/month minimum.
+Sportradar: enterprise tier only. DSG is the sole viable option confirmed to provide
+player-level stats for Six Nations + Top 14 at indie startup pricing.
+
+---
+
+## D-038 — Scoring system revision following DSG coverage mapping
+
+**Date:** 2026-03-23
+**Status:** Accepted
+
+**Context:** Phase 0 DSG validation confirmed which stats are available.
+Two stats from the original scoring system (CDC v3.1 section 6) are absent from DSG.
+Four additional stats available in DSG were not in the original system.
+
+**Decision:**
+
+Removed (not available in DSG):
+
+- 50/22 kicks (+2 pts) — `dsg field: none`
+- Dominant tackles (+1 pt) — `dsg field: none`
+
+Added (available in DSG, improve differentiation):
+
+- Missed tackle (-0.5 pts) — `dsg field: missed_tackles`
+- Handling error (-0.5 pts) — `dsg field: handling_error`
+- Line break (+1 pt) — `dsg field: line_breaks`
+- Catch from kick (+0.5 pts) — `dsg field: catch_from_kick`
+
+All four added stats use `COALESCE(stat, 0)` in dbt (conditional stats — may be absent
+from API response on low-activity matches).
+
+**Rationale:**
+
+- 50/22 is rare (1–2 per match maximum), creates minimal differentiation, and is absent from DSG.
+- Dominant tackles are a derived/subjective stat, not tracked individually by DSG.
+- Missed tackles penalise poor defenders — strategically meaningful, well-represented per match.
+- Handling errors penalise sloppy ball carriers — balances the offload bonus.
+- Line breaks reward incisive ball carriers — particularly differentiating for backs.
+- Catch from kick rewards fullbacks and wingers under pressure — fills a gap for positional identity.
+- Net effect: more granular differentiation between positions, especially backs vs forwards.
+
+**Files impacted:** `dbt/models/gold/mart_fantasy_points.sql`,
+`CONTEXT.md` (scoring summary section), `docs/cdc_v31.md` (section 6).

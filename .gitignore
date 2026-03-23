@@ -1,6 +1,7 @@
 # ── Confidential docs ─────────────────────────────────────────────────────────
 docs/cdc*.md
 docs/cdc*.docx
+docs/dsg*.docx
 
 # ── Environment variables ──────────────────────────────────────────────────────
 .env

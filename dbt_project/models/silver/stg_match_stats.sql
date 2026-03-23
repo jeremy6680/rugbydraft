@@ -64,10 +64,10 @@ staged as (
         -- goals = all successful kicks at goal (penalties + conversions)
         -- conversion_goals = conversions made only
         -- penalties_made is derived in gold: goals - conversion_goals
-        -- Kicker designation managed in FastAPI/PostgreSQL, not in dbt.
+        -- DuckDB: prefix source columns to avoid alias collision.
         -- ----------------------------------------------------------------
-        coalesce(cast(goals             as integer), 0) as goals,
-        coalesce(cast(conversion_goals  as integer), 0) as conversion_goals,
+        coalesce(cast(source.goals            as integer), 0) as goals,
+        coalesce(cast(source.conversion_goals as integer), 0) as conversion_goals,
 
         -- ----------------------------------------------------------------
         -- Defence stats (D-039)

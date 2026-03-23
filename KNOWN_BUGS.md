@@ -16,6 +16,10 @@ for dbt 1.11.
 The warning fires incorrectly — tests pass (PASS=29).
 **Workaround:** None needed. Tests are valid and passing.
 **Fix:** Will resolve on dbt-core or dbt-duckdb upgrade.
+**Update 2026-03-23:** confirmed this bug produces invalid SQL (`not in ()`)
+in some dbt-duckdb versions, causing test failures — not just warnings.
+Fixed by removing the `config:` wrapper from all `accepted_values` tests
+in `schema.yml`. Use `values:` directly under `accepted_values:`.
 
 ---
 
@@ -141,6 +145,32 @@ Supabase client. Manual testing was not performed due to missing seed data.
 
 **Fix:** Add integration tests with a mocked AsyncClient before Phase 4.
 Same pattern as KB-004 and KB-006.
+
+---
+
+---
+
+## KB-008 — Silver models not yet updated for DSG field mapping (scoring v2)
+
+**Status:** Known / blocking for first real DSG pipeline run
+**Affects:** `dbt_project/models/silver/stg_match_stats.sql` and
+`connectors/dsg.py` (not yet created)
+
+The silver model `stg_match_stats.sql` has been rewritten for scoring v2
+(D-039) but references DSG field names (`kick_assists`, `line_breaks`,
+`catch_from_kick`, `lineouts_won`, `lineouts_lost`, `turnovers_conceded`,
+`handling_error`) that do not yet exist in `data/raw/player_stats.json`.
+
+The mock connector (`connectors/mock.py`) has been updated to produce the
+correct fields. The DSG connector (`connectors/dsg.py`) does not yet exist.
+
+**Fix:** Implement `connectors/dsg.py` (Phase 1 remaining task). The connector
+must parse the DSG XML/JSON response and map DSG field names to the
+`PlayerMatchStats` contract defined in `connectors/base.py`.
+
+**Workaround:** `dbt run --target ci --select silver` passes using mock data.
+`dbt run --target prod --select gold` requires real DSG data and the DSG
+connector to be implemented first.
 
 ---
 

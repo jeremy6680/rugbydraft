@@ -2,7 +2,7 @@
 
 > Repository structure explained.
 > Updated at each phase — reflects the current state of the codebase.
-> Last updated: 2026-03-19 (Phase 2 — Draft Engine, broadcast wiring)
+> Last updated: 2026-03-23 (feat/scoring-v2-dsg — scoring system v2, DSG field mapping)
 
 ---
 
@@ -170,6 +170,8 @@ backend/
 │   └── processor.py         # Pure: full cycle processing — granted/denied/skipped
 ├── tests/
 │   ├── __init__.py
+│   ├── test_fantasy_points.py  # 39 tests — scoring system v2 (D-039): attack, defence,
+│   │                           # captain multiplier, kicker-only, full player profiles
 │   ├── test_health.py       # 8 tests — health endpoint + auth middleware
 │   ├── test_lineup.py       # 14 tests: Pydantic, lock, IR, multi-position, captain/kicker CDC 6.6
 │   ├── test_reconnection.py # 4 tests — reconnection protocol (D-025)
@@ -235,19 +237,18 @@ requires changing one file and one environment variable.
 ```
 connectors/
 ├── __init__.py
-├── base.py          # BaseRugbyConnector ABC — defines the connector contract
-├── mock.py          # MockRugbyConnector — returns fixture data for testing
-└── requirements.txt # Connector dependencies (pydantic) — used by CI and pipeline
+├── base.py          # BaseRugbyConnector ABC + PlayerMatchStats (scoring v2 — D-039)
+├── mock.py          # MockRugbyConnector — realistic test data, scoring v2 fields
+└── requirements.txt # Connector dependencies (pydantic)
 ```
 
-| File               | Purpose                                                      |
-| ------------------ | ------------------------------------------------------------ |
-| `base.py`          | Abstract base class — all connectors must implement this     |
-| `mock.py`          | Stub connector returning hardcoded data — used in Phase 1 CI |
-| `requirements.txt` | Pinned dependencies for CI cache stability                   |
+| File               | Purpose                                                                      |
+| ------------------ | ---------------------------------------------------------------------------- |
+| `base.py`          | Abstract base class — PlayerMatchStats updated for DSG field mapping (D-039) |
+| `mock.py`          | Stub connector — updated with scoring v2 fields for test coverage            |
+| `requirements.txt` | Pinned dependencies for CI cache stability                                   |
 
-Real connector implementations (`statscore.py`, `sportradar.py`, etc.)
-will be added in Phase 3 once the provider is confirmed (D-012).
+DSG connector (`connectors/dsg.py`) to be implemented — see KB-008.
 
 ---
 
@@ -286,7 +287,7 @@ dbt_project/
 │   ├── silver/                         # Cleaned, typed, validated data — tables
 │   │   ├── stg_players.sql             # Player reference data
 │   │   ├── stg_matches.sql             # Finished matches only
-│   │   ├── stg_match_stats.sql         # Stats with COALESCE on conditional fields
+│   │   ├── stg_match_stats.sql         # Stats with DSG field mapping (D-039) — scoring v2
 │   │   ├── stg_fixtures.sql            # All fixtures, canonical column names
 │   │   └── stg_player_availability.sql # Availability with typed fields
 │   └── gold/                           # Fantasy points, leaderboard, player value — tables
@@ -343,6 +344,7 @@ Utility scripts. Not part of the application — run manually or in CI.
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `validate_api.py`        | Phase 0 — tests a rugby data provider against the required stats checklist                                                                                                                                  |
 | `export_silver_to_pg.py` | Phase 3 — exports dbt silver tables from DuckDB to PostgreSQL as `pipeline_stg_*` tables. Bridge step between dbt silver (DuckDB) and dbt gold (PostgreSQL). Runs as step 3 of Airflow post_match_pipeline. |
+| `ingest_mock.py`         | Phase 1 — calls active connector and writes JSON to `data/raw/`. Entry point for daily crons and post_match_pipeline. Updated for scoring v2 fields.                                                        |
 
 ---
 

@@ -97,13 +97,17 @@ jobs:
           done
           echo "All expected JSON files present."
 
-      - name: Run dbt (bronze → silver)
+      - name: Install dbt packages
         working-directory: dbt_project
-        run: dbt run --profiles-dir ~/.dbt --target ci
+        run: dbt deps --profiles-dir ~/.dbt
+
+      - name: Run dbt (bronze → silver only)
+        working-directory: dbt_project
+        run: dbt run --profiles-dir ~/.dbt --target ci --select bronze silver
 
       - name: Run dbt tests (silver layer)
         working-directory: dbt_project
-        run: dbt test --profiles-dir ~/.dbt --target ci
+        run: dbt test --profiles-dir ~/.dbt --target ci --select silver
 
       - name: Upload dbt logs on failure
         if: failure()

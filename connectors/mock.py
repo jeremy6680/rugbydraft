@@ -284,11 +284,18 @@ _FIXTURES_DATA: list[dict] = [
 # Covers all scoring stats from CDC section 10 for pipeline testing
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Mock player stats — for the finished match (France 24 - 17 England, round 1)
+# Reflects scoring system v2 (D-039) — DSG field mapping.
+# Covers all scoring paths: try, kicker, captain, conditional stats, cards.
+# ---------------------------------------------------------------------------
+
 _PLAYER_STATS_DATA: list[dict] = [
-    # France players
+    # --- Cyril Baille (prop, FRA) ---
+    # Solid forward: metres, tackles, lineout work
     {
         "external_match_id": _MATCH_FINISHED_ID,
-        "external_player_id": "p001",  # Cyril Baille
+        "external_player_id": "p001",
         "player_name": "Cyril Baille",
         "team_id": "FRA",
         "position_played": PositionType.PROP,
@@ -296,25 +303,28 @@ _PLAYER_STATS_DATA: list[dict] = [
         "tries": 0,
         "try_assists": 0,
         "metres_carried": 45,
-        "offloads": 1,
-        "drop_goals": 0,
+        "kick_assists": None,
+        "line_breaks": None,
+        "catch_from_kick": None,
         "conversions_made": 0,
-        "conversions_missed": 0,
         "penalties_made": 0,
-        "penalties_missed": 0,
-        "fifty_twentytwo": None,  # provider does not supply
         "tackles": 8,
-        "dominant_tackles": None,  # provider does not supply
         "turnovers_won": 1,
-        "lineout_steals": None,  # provider does not supply
+        "lineouts_won": 4,  # hooker role — main scoring vector for forwards
+        "lineouts_lost": 1,
+        "turnovers_conceded": 0,
+        "missed_tackles": 1,
+        "handling_errors": 0,
         "penalties_conceded": 1,
         "yellow_cards": 0,
         "red_cards": 0,
         "is_first_match_of_round": True,
     },
+    # --- Gregory Alldritt (number_8, FRA) ---
+    # Big game: try + try assist + metres + turnovers
     {
         "external_match_id": _MATCH_FINISHED_ID,
-        "external_player_id": "p005",  # Gregory Alldritt — big game
+        "external_player_id": "p005",
         "player_name": "Gregory Alldritt",
         "team_id": "FRA",
         "position_played": PositionType.NUMBER_8,
@@ -322,53 +332,57 @@ _PLAYER_STATS_DATA: list[dict] = [
         "tries": 1,
         "try_assists": 1,
         "metres_carried": 112,
-        "offloads": 3,
-        "drop_goals": 0,
+        "kick_assists": None,
+        "line_breaks": 2,
+        "catch_from_kick": None,
         "conversions_made": 0,
-        "conversions_missed": 0,
         "penalties_made": 0,
-        "penalties_missed": 0,
-        "fifty_twentytwo": None,
         "tackles": 12,
-        "dominant_tackles": None,
         "turnovers_won": 2,
-        "lineout_steals": None,
+        "lineouts_won": None,
+        "lineouts_lost": None,
+        "turnovers_conceded": 1,
+        "missed_tackles": 0,
+        "handling_errors": 1,
         "penalties_conceded": 0,
         "yellow_cards": 0,
         "red_cards": 0,
         "is_first_match_of_round": True,
     },
+    # --- Thomas Ramos (fullback, FRA) ---
+    # Designated kicker — tests kicker-only stats path
     {
         "external_match_id": _MATCH_FINISHED_ID,
-        "external_player_id": "p006",  # Thomas Ramos — kicker
+        "external_player_id": "p006",
         "player_name": "Thomas Ramos",
         "team_id": "FRA",
         "position_played": PositionType.FULLBACK,
         "minutes_played": 80,
         "tries": 0,
-        "try_assists": 0,
+        "try_assists": 1,
         "metres_carried": 67,
-        "offloads": 1,
-        "drop_goals": 0,
-        # Kicker stats — meaningful only if Ramos is designated kicker in roster
-        "conversions_made": 2,
-        "conversions_missed": 1,
-        "penalties_made": 3,
-        "penalties_missed": 0,
-        "fifty_twentytwo": None,
+        "kick_assists": 1,
+        "line_breaks": 1,
+        "catch_from_kick": 3,
+        "conversions_made": 2,  # kicker only: +2 × 2 = +4
+        "penalties_made": 3,  # kicker only: +3 × 3 = +9
         "tackles": 4,
-        "dominant_tackles": None,
         "turnovers_won": 0,
-        "lineout_steals": None,
+        "lineouts_won": None,
+        "lineouts_lost": None,
+        "turnovers_conceded": 0,
+        "missed_tackles": 0,
+        "handling_errors": 0,
         "penalties_conceded": 0,
         "yellow_cards": 0,
         "red_cards": 0,
         "is_first_match_of_round": True,
     },
-    # England players
+    # --- Maro Itoje (lock, ENG) ---
+    # Yellow card + high tackle count — tests negative stats + cards
     {
         "external_match_id": _MATCH_FINISHED_ID,
-        "external_player_id": "p009",  # Maro Itoje
+        "external_player_id": "p009",
         "player_name": "Maro Itoje",
         "team_id": "ENG",
         "position_played": PositionType.LOCK,
@@ -376,25 +390,28 @@ _PLAYER_STATS_DATA: list[dict] = [
         "tries": 0,
         "try_assists": 0,
         "metres_carried": 28,
-        "offloads": 0,
-        "drop_goals": 0,
+        "kick_assists": None,
+        "line_breaks": None,
+        "catch_from_kick": None,
         "conversions_made": 0,
-        "conversions_missed": 0,
         "penalties_made": 0,
-        "penalties_missed": 0,
-        "fifty_twentytwo": None,
         "tackles": 18,
-        "dominant_tackles": None,
         "turnovers_won": 1,
-        "lineout_steals": None,
+        "lineouts_won": None,
+        "lineouts_lost": None,
+        "turnovers_conceded": 0,
+        "missed_tackles": 2,
+        "handling_errors": 1,
         "penalties_conceded": 2,
         "yellow_cards": 1,  # -2 pts
         "red_cards": 0,
         "is_first_match_of_round": True,
     },
+    # --- Marcus Smith (fly_half, ENG) ---
+    # Try + kick_assist + kicker path (if designated) — tests multiple scoring vectors
     {
         "external_match_id": _MATCH_FINISHED_ID,
-        "external_player_id": "p012",  # Marcus Smith — try + kicker
+        "external_player_id": "p012",
         "player_name": "Marcus Smith",
         "team_id": "ENG",
         "position_played": PositionType.FLY_HALF,
@@ -402,17 +419,18 @@ _PLAYER_STATS_DATA: list[dict] = [
         "tries": 1,
         "try_assists": 1,
         "metres_carried": 55,
-        "offloads": 2,
-        "drop_goals": 1,  # +3 pts (all starters)
-        "conversions_made": 1,
-        "conversions_missed": 1,
-        "penalties_made": 2,
-        "penalties_missed": 1,
-        "fifty_twentytwo": None,
+        "kick_assists": 2,
+        "line_breaks": 1,
+        "catch_from_kick": 1,
+        "conversions_made": 1,  # kicker only if designated
+        "penalties_made": 2,  # kicker only if designated
         "tackles": 3,
-        "dominant_tackles": None,
         "turnovers_won": 0,
-        "lineout_steals": None,
+        "lineouts_won": None,
+        "lineouts_lost": None,
+        "turnovers_conceded": 1,
+        "missed_tackles": 1,
+        "handling_errors": 0,
         "penalties_conceded": 1,
         "yellow_cards": 0,
         "red_cards": 0,

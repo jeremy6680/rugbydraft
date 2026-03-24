@@ -1495,3 +1495,75 @@ manual picks.
 - The endpoint returns the full updated `DraftStateSnapshotResponse` — the client
   gets the new state immediately without waiting for the Realtime broadcast.
   (Belt-and-suspenders: Realtime also broadcasts, but the HTTP response is faster.)
+
+---
+
+## D-042 — Roster page: single atomic POST for all lineup changes
+
+**Date:** 2026-03-24
+**Status:** Accepted
+
+**Context:** The roster management page allows multiple simultaneous changes
+in one editing session: captain designation, kicker designation, position
+overrides for multi-position players, and starter ↔ bench swaps. The question
+was whether to use one endpoint per action type or a single consolidated POST.
+
+**Options considered:**
+
+- A) One endpoint per action: `PATCH /lineup/captain`, `PATCH /lineup/kicker`,
+  `POST /lineup/swap`, `PATCH /lineup/position`
+- B) Single atomic POST: `POST /lineup/{leagueId}/update` with a
+  `LineupUpdatePayload` containing all change types in one request.
+
+**Decision:** Option B — single atomic POST.
+
+**Rationale:**
+
+- Prevents race conditions if the user makes rapid successive changes
+  (e.g. captain change + position override within the same render cycle).
+- The backend validates the entire payload before committing any change —
+  partial failure is impossible.
+- Simpler frontend state: one `isSaving` flag, one optimistic update,
+  one rollback path.
+- Fewer HTTP round trips.
+
+**Consequences:**
+
+- `LineupUpdatePayload` carries all change types. Fields not being changed
+  are sent as null / empty arrays — the backend ignores them.
+- The backend `POST /lineup/{leagueId}/update` must validate each field
+  independently and return the full confirmed `WeeklyLineupResponse`.
+
+---
+
+## D-043 — Sidebar hydration: useEffect init pattern replacing lazy useState
+
+**Date:** 2026-03-24
+**Status:** Accepted
+
+**Context:** `Sidebar.tsx` persists collapsed state in localStorage. The
+original implementation used a lazy `useState` initializer that called
+`localStorage` directly — this caused a hydration mismatch under
+Next.js 15 / Turbopack because the lazy initializer runs during SSR
+where `localStorage` is undefined.
+
+**Decision:** Replace lazy initializer with `useState<boolean | null>(null)`
+
+- `useEffect` that reads localStorage once after mount. `null` means
+  "not yet mounted" — renders a same-width placeholder div instead of the
+  real sidebar until localStorage is read.
+
+**Rationale:**
+
+- `useEffect` is guaranteed to run only on the client, never during SSR.
+- The placeholder div has the same width as the default expanded sidebar
+  (`w-60`) — no layout shift on first paint.
+- `isCollapsed === null` replaces a separate `mounted` boolean flag —
+  one piece of state instead of two.
+
+**Consequences:**
+
+- Any component that reads browser-only APIs (localStorage, sessionStorage,
+  window) must follow this same pattern: `useState(null)` + `useEffect` init.
+- The sidebar flashes its placeholder for one frame on cold load if the
+  user had it collapsed — imperceptible in practice.

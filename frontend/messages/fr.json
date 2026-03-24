@@ -107,19 +107,84 @@
     }
   },
   "roster": {
-    "title": "Mon équipe",
-    "starters": "Titulaires",
-    "bench": "Remplaçants",
-    "infirmary": "Infirmerie",
-    "captain": "Capitaine",
-    "kicker": "Buteur",
-    "setCaptain": "Désigner capitaine",
-    "setKicker": "Désigner buteur",
-    "moveToStarter": "Mettre titulaire",
-    "moveToBench": "Mettre sur le banc",
-    "moveToIR": "Mettre à l'infirmerie",
+    "pageTitle": "Mon équipe",
+    "noActiveRound": "Aucune journée en cours. La compétition n'a pas encore démarré.",
+
+    "tabs": {
+      "label": "Navigation du roster",
+      "starters": "Titulaires",
+      "bench": "Remplaçants",
+      "ir": "Infirmerie"
+    },
+
+    "starters": {
+      "title": "Titulaires"
+    },
+
+    "bench": {
+      "title": "Remplaçants"
+    },
+
+    "slot": {
+      "empty": "Slot #{number} vide",
+      "vacant": "Vacant"
+    },
+
+    "availability": {
+      "available": "Disponible",
+      "injured": "Blessé",
+      "suspended": "Suspendu",
+      "doubtful": "Incertain"
+    },
+
     "locked": "Verrouillé",
-    "lockedAt": "Verrouillé au coup d'envoi"
+    "current": "Sélectionné",
+
+    "coverage": {
+      "title": "Couverture banc",
+      "ok": "Couverture complète",
+      "uncovered": "{count} poste(s) découvert(s)",
+      "detail": "Détail de la couverture par poste"
+    },
+
+    "ir": {
+      "title": "Infirmerie",
+      "empty": "Slot infirmerie vide",
+      "slot": "Slot infirmerie #{number}",
+      "recovered": "Guéri — à réintégrer",
+      "blockingAlert": "Un joueur guéri attend sa réintégration. Les waivers et trades sont bloqués jusqu'à cette action.",
+      "rulesNote": "Les joueurs en infirmerie ne marquent aucun point. Vous avez {deadline} jours pour réintégrer un joueur guéri.",
+      "reintegrate": {
+        "label": "Réintégrer {name}",
+        "action": "Réintégrer"
+      }
+    },
+
+    "captain": {
+      "label": "Capitaine",
+      "description": "Multiplie les points par ×1,5",
+      "pickerTitle": "Choisir le capitaine"
+    },
+
+    "kicker": {
+      "label": "Botteur",
+      "description": "Marque sur pénalités et transformations",
+      "pickerTitle": "Choisir le botteur"
+    },
+
+    "captainKicker": {
+      "title": "Capitaine & Botteur"
+    },
+
+    "designation": {
+      "none": "Non désigné",
+      "locked": "Verrouillé — match commencé",
+      "change": "Changer"
+    },
+
+    "multiPosition": {
+      "label": "Choisir le poste pour cette journée"
+    }
   },
   "leaderboard": {
     "title": "Classement",

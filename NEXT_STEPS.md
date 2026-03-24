@@ -263,7 +263,18 @@
   - [x] `backend/app/routers/players.py` — new `GET /players` endpoint
   - [x] `messages/fr.json` — all draft i18n keys added
   - [x] framer-motion installed
-- [ ] Roster management page — starters / bench / IR, weekly lineup, captain + kicker designation
+- [x] Roster management page — starters / bench / IR, weekly lineup, captain + kicker designation
+  - [x] `src/types/roster.ts` — TypeScript types (RosterSlot, WeeklyLineupEntry, LineupUpdatePayload, etc.)
+  - [x] `src/hooks/useRosters.ts` — fetch + mutations + coverage computation + lock polling
+  - [x] `src/components/roster/RosterPlayerCard.tsx` — player card, lock/captain/kicker/IR states
+  - [x] `src/components/roster/RosterSlotGrid.tsx` — 15 starter slots, jersey order, position groups
+  - [x] `src/components/roster/RosterBenchGrid.tsx` — bench slots + coverage bar (CDC §6.2)
+  - [x] `src/components/roster/RosterIRPanel.tsx` — IR slots, reintegration button, blocking alert
+  - [x] `src/components/roster/RosterCaptainKickerBar.tsx` — captain/kicker designation, player picker
+  - [x] `src/components/roster/RosterManagement.tsx` — orchestrator, swap flow, mobile tabs
+  - [x] `src/app/[locale]/(protected)/league/[leagueId]/roster/page.tsx` — Server Component, current round fetch
+  - [x] `messages/fr.json` — all roster i18n keys added
+  - [x] `src/components/layout/Sidebar.tsx` — fixed hydration mismatch (localStorage + Turbopack)
 - [ ] Leaderboard — live updates via Supabase Realtime
 - [ ] Stats page — all filters (status, nationality/club, position, period, multi-criteria)
 - [ ] Dashboard — all active leagues, alerts, next opponent

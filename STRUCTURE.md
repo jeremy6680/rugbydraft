@@ -388,11 +388,17 @@ frontend/
 │   │       │   ├── layout.tsx         # Session guard (getUser) + AppShell wrapper
 │   │       │   ├── dashboard/
 │   │       │   │   └── page.tsx       # Dashboard placeholder (replaced in Phase 4)
-│   │       │   └── draft/
-│   │       │       └── [draftId]/
-│   │       │           └── page.tsx   # Draft Room page — Server Component
-│   │       │                          # Fetches players + manager names server-side,
-│   │       │                          # passes currentUserId + data to DraftRoom (D-040)
+│   │       │   ├── draft/
+│   │       │   │   └── [draftId]/
+│   │       │   │       └── page.tsx   # Draft Room page — Server Component
+│   │       │   │                      # Fetches players + manager names server-side,
+│   │       │   │                      # passes currentUserId + data to DraftRoom (D-040)
+│   │       │   └── league/
+│   │       │       └── [leagueId]/
+│   │       │           └── roster/
+│   │       │               └── page.tsx   # Roster page — Server Component
+│   │       │                              # Fetches current round server-side (revalidate: 60s)
+│   │       │                              # Passes leagueId + roundId to RosterManagement
 │   │       └── login/
 │   │           └── page.tsx           # Login page: split-screen brand + magic link form
 │   ├── components/
@@ -412,14 +418,26 @@ frontend/
 │   │   │   ├── DraftOrderPanel.tsx    # Snake order upcoming slots + full pick history
 │   │   │   └── DraftPickConfirmModal.tsx  # Pick confirmation dialog:
 │   │   │                                  # focus trap, Escape key, Framer Motion
+│   │   ├── roster/
+│   │   │   ├── RosterManagement.tsx       # Main orchestrator — mobile tabs / desktop 3-col grid
+│   │   │   │                              # Swap flow: 2-click starter ↔ bench, updateLineup dispatch
+│   │   │   ├── RosterPlayerCard.tsx       # Player card atom: lock/captain/kicker/IR states
+│   │   │   │                              # Multi-position selector (locked at kick-off)
+│   │   │   ├── RosterSlotGrid.tsx         # 15 starter slots in jersey order, grouped by line
+│   │   │   ├── RosterBenchGrid.tsx        # Bench slots + coverage bar (CDC §6.2 minimums)
+│   │   │   ├── RosterIRPanel.tsx          # IR slots (max 3), reintegration CTA, blocking alert
+│   │   │   └── RosterCaptainKickerBar.tsx # Captain (×1.5) + kicker designation
+│   │   │                                  # Mobile: fixed bottom bar. Desktop: inline.
 │   │   └── layout/
 │   │       ├── AppShell.tsx           # Layout wrapper: Sidebar + main + BottomNav
 │   │       ├── BottomNav.tsx          # Mobile fixed bottom nav — 5 items, Client Component
 │   │       └── Sidebar.tsx            # Desktop sticky sidebar — collapsible, Client Component
 │   ├── hooks/
-│   │   └── useDraftRealtime.ts        # Supabase Realtime subscription + polling fallback
-│   │                                  # Calls POST /connect on mount, POST /disconnect on unmount
-│   │                                  # Polling every 5s when Realtime disconnected
+│   │   ├── useDraftRealtime.ts        # Supabase Realtime subscription + polling fallback
+│   │   │                              # Calls POST /connect on mount, POST /disconnect on unmount
+│   │   │                              # Polling every 5s when Realtime disconnected
+│   │   └── useRosters.ts              # Roster + lineup fetch, coverage computation,
+│   │                                  # lock status polling (30s), optimistic updates + rollback
 │   ├── i18n/
 │   │   ├── routing.ts                 # next-intl: supported locales, defaultLocale
 │   │   └── request.ts                 # next-intl: server-side locale resolution
@@ -430,7 +448,9 @@ frontend/
 │   └── types/
 │       ├── draft.ts                   # TypeScript mirror of FastAPI draft schemas
 │       │                              # DraftStateSnapshot, PickRecord, DraftUIState
-│       └── player.ts                  # TypeScript mirror of PlayerSummary (backend)
+│       ├── player.ts                  # TypeScript mirror of PlayerSummary (backend)
+│       └── roster.ts                  # RosterSlot, WeeklyLineupEntry, LineupUpdatePayload
+│                                      # RosterCoverageStatus, STARTER_POSITIONS, BENCH_COVERAGE_MINIMUMS
 ├── proxy.ts                           # next-intl routing + Supabase session refresh
 │                                      # + route protection (renamed from middleware.ts — KB-002)
 ├── .env.example

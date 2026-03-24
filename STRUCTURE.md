@@ -386,25 +386,53 @@ frontend/
 │   │       ├── page.tsx               # Temp home page (Phase 1 skeleton)
 │   │       ├── (protected)/           # Route group — authenticated pages only
 │   │       │   ├── layout.tsx         # Session guard (getUser) + AppShell wrapper
-│   │       │   └── dashboard/
-│   │       │       └── page.tsx       # Dashboard placeholder (replaced in Phase 4)
+│   │       │   ├── dashboard/
+│   │       │   │   └── page.tsx       # Dashboard placeholder (replaced in Phase 4)
+│   │       │   └── draft/
+│   │       │       └── [draftId]/
+│   │       │           └── page.tsx   # Draft Room page — Server Component
+│   │       │                          # Fetches players + manager names server-side,
+│   │       │                          # passes currentUserId + data to DraftRoom (D-040)
 │   │       └── login/
 │   │           └── page.tsx           # Login page: split-screen brand + magic link form
 │   ├── components/
 │   │   ├── auth/
 │   │   │   └── LoginForm.tsx          # Magic link form — Client Component
+│   │   ├── draft/
+│   │   │   ├── DraftRoom.tsx          # Main orchestrator — mobile-first layout
+│   │   │   │                          # Sidebar desktop / bottom sheet mobile
+│   │   │   ├── DraftTimer.tsx         # Countdown with urgency colours + Framer Motion pulse
+│   │   │   │                          # Resyncs from server snapshot on each broadcast
+│   │   │   ├── DraftStatusBanner.tsx  # Contextual banner: your turn / waiting /
+│   │   │   │                          # autodraft / completed — animated with Framer Motion
+│   │   │   ├── DraftPlayerCard.tsx    # Single player card: available (button) /
+│   │   │   │                          # drafted / injured / suspended (div, non-interactive)
+│   │   │   ├── DraftPlayerList.tsx    # Filterable scrollable pool:
+│   │   │   │                          # text search + position chips, memoised sort
+│   │   │   ├── DraftOrderPanel.tsx    # Snake order upcoming slots + full pick history
+│   │   │   └── DraftPickConfirmModal.tsx  # Pick confirmation dialog:
+│   │   │                                  # focus trap, Escape key, Framer Motion
 │   │   └── layout/
 │   │       ├── AppShell.tsx           # Layout wrapper: Sidebar + main + BottomNav
 │   │       ├── BottomNav.tsx          # Mobile fixed bottom nav — 5 items, Client Component
 │   │       └── Sidebar.tsx            # Desktop sticky sidebar — collapsible, Client Component
+│   ├── hooks/
+│   │   └── useDraftRealtime.ts        # Supabase Realtime subscription + polling fallback
+│   │                                  # Calls POST /connect on mount, POST /disconnect on unmount
+│   │                                  # Polling every 5s when Realtime disconnected
 │   ├── i18n/
 │   │   ├── routing.ts                 # next-intl: supported locales, defaultLocale
 │   │   └── request.ts                 # next-intl: server-side locale resolution
-│   └── lib/
-│       └── supabase/
-│           ├── client.ts              # createBrowserSupabaseClient — Client Components
-│           └── server.ts              # createServerSupabaseClient — Server Components
-├── middleware.ts                       # next-intl routing + Supabase session refresh + route protection
+│   ├── lib/
+│   │   └── supabase/
+│   │       ├── client.ts              # createBrowserSupabaseClient — Client Components
+│   │       └── server.ts              # createServerSupabaseClient — Server Components
+│   └── types/
+│       ├── draft.ts                   # TypeScript mirror of FastAPI draft schemas
+│       │                              # DraftStateSnapshot, PickRecord, DraftUIState
+│       └── player.ts                  # TypeScript mirror of PlayerSummary (backend)
+├── proxy.ts                           # next-intl routing + Supabase session refresh
+│                                      # + route protection (renamed from middleware.ts — KB-002)
 ├── .env.example
 ├── next.config.ts
 └── tsconfig.json

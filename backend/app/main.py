@@ -24,6 +24,7 @@ from app.middleware.auth import AuthMiddleware
 from app.routers import draft, draft_assisted, health, trades, waivers
 from app.routers.lineup import router as lineup_router
 from app.routers.infirmary import router as infirmary_router
+from app.routers.players import router as players_router  # noqa: E402
 
 from draft.registry import DraftRegistry
 from infirmary.ir_scheduler import get_scheduler, register_ir_jobs
@@ -135,7 +136,6 @@ app.include_router(trades.router)
 app.include_router(waivers.router)
 app.include_router(lineup_router)
 app.include_router(infirmary_router)
+app.include_router(players_router)
 
-
-# Phase 3: app.include_router(players.router, prefix="/players")
 # Phase 3: app.include_router(leagues.router, prefix="/leagues")

@@ -1437,3 +1437,61 @@ Conditional stats (COALESCE to 0 if absent from API response):
 - `CONTEXT.md` (scoring summary section)
 - `docs/dsg_api_reference.md` (section 6 — field mapping)
 - `docs/cdc_v31.md` (section 6 — scoring rules)
+
+---
+
+## D-040 — Draft Room: currentUserId passed as prop from Server Component
+
+**Date:** 2026-03-24
+**Status:** Accepted
+
+**Context:** The Draft Room (`DraftRoom.tsx`) is a Client Component that needs
+the authenticated user's UUID to compute `isMyTurn` and `isAutodraftActive`.
+Three options were considered.
+
+**Options considered:**
+
+- A) Pass `currentUserId` as prop from the Server Component page (`page.tsx`).
+- B) Hook `useUser()` calling `supabase.auth.getUser()` client-side on mount.
+- C) React Context Provider (`AuthProvider`) wrapping the protected layout.
+
+**Decision:** Option A — prop from Server Component.
+
+**Rationale:**
+
+- The page Server Component already calls `supabase.auth.getUser()` for the
+  session check. Passing `user.id` as a prop costs zero extra requests.
+- Option B would trigger an extra client-side network call on every Draft Room
+  mount — unnecessary latency in a latency-sensitive UI.
+- Option C is overkill for V1 — only one Client Component currently needs the
+  user ID. Can migrate to Context if more components require it.
+
+**Consequences:**
+
+- `user.id` is visible in React DevTools props — acceptable (UUID is not secret).
+- If other Client Components need the user ID, add a Context Provider at that point.
+
+---
+
+## D-041 — POST /draft/{league_id}/pick endpoint added in Phase 4
+
+**Date:** 2026-03-24
+**Status:** Accepted
+
+**Context:** The `DraftEngine.submit_pick()` method existed since Phase 2 but
+had no HTTP endpoint. The Draft Room frontend required this endpoint to submit
+manual picks.
+
+**Decision:** Added `POST /draft/{league_id}/pick` to `backend/app/routers/draft.py`.
+
+**Error mapping:**
+
+- `NotYourTurnError` → HTTP 409 Conflict
+- `PlayerAlreadyDraftedError` → HTTP 409 Conflict
+- `PickValidationError` → HTTP 422 Unprocessable Entity
+
+**Consequences:**
+
+- The endpoint returns the full updated `DraftStateSnapshotResponse` — the client
+  gets the new state immediately without waiting for the Realtime broadcast.
+  (Belt-and-suspenders: Realtime also broadcasts, but the HTTP response is faster.)

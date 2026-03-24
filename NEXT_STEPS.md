@@ -247,7 +247,22 @@
 **Estimated duration:** 3–4 weeks
 **Prerequisite:** Phase 3 complete.
 
-- [ ] Draft Room — full-screen mobile-first, real-time timer, player list, pick confirmation
+- [x] Draft Room — full-screen mobile-first, real-time timer, player list, pick confirmation
+  - [x] `src/types/draft.ts` — TypeScript mirror of FastAPI schemas
+  - [x] `src/types/player.ts` — TypeScript mirror of PlayerSummary
+  - [x] `src/hooks/useDraftRealtime.ts` — Supabase Realtime + polling fallback + connect/disconnect
+  - [x] `src/components/draft/DraftTimer.tsx` — countdown with urgency colours + Framer Motion
+  - [x] `src/components/draft/DraftStatusBanner.tsx` — contextual status (your turn / waiting / autodraft / done)
+  - [x] `src/components/draft/DraftPlayerCard.tsx` — player card, available/drafted/injured states
+  - [x] `src/components/draft/DraftPlayerList.tsx` — filterable scrollable pool (search + position chips)
+  - [x] `src/components/draft/DraftOrderPanel.tsx` — snake order + pick history
+  - [x] `src/components/draft/DraftPickConfirmModal.tsx` — confirmation modal, focus trap, keyboard
+  - [x] `src/components/draft/DraftRoom.tsx` — main orchestrator, mobile-first layout
+  - [x] `src/app/[locale]/(protected)/draft/[draftId]/page.tsx` — Server Component, parallel data fetch
+  - [x] `backend/app/routers/draft.py` — added `POST /{league_id}/pick` endpoint
+  - [x] `backend/app/routers/players.py` — new `GET /players` endpoint
+  - [x] `messages/fr.json` — all draft i18n keys added
+  - [x] framer-motion installed
 - [ ] Roster management page — starters / bench / IR, weekly lineup, captain + kicker designation
 - [ ] Leaderboard — live updates via Supabase Realtime
 - [ ] Stats page — all filters (status, nationality/club, position, period, multi-criteria)
@@ -319,13 +334,11 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 
 ## Immediate next actions
 
-**→ Phase 1 remaining:** ~~implement `connectors/dsg.py` (see KB-008)~~ ✅ Done
-
-- `connectors/dsg.py` — DSGConnector, XML parser, 3-pass strategy
-  (try_counts + card_map + player_stats iteration)
-- `connectors/tests/test_dsg_connector.py` — 33 tests passing
-- KB-008 resolved
+**→ Phase 4 in progress:** Draft Room ✅ — next: Roster management page
 
 **→ Phase 1 remaining:** Cron Coolify config (after first deploy to Hetzner)
 
-**→ Phase 4:** all deferred integration tests (KB-004, KB-006, KB-007)
+**→ Phase 4 deferred:** all integration tests (KB-004, KB-006, KB-007)
+
+**→ TODO (Phase 4 follow-up):** expose `draft_order` in `DraftStateSnapshotResponse`
+so `DraftOrderPanel` can show the full upcoming snake order (not just current slot).

@@ -187,12 +187,21 @@
     }
   },
   "leaderboard": {
-    "title": "Classement",
-    "rank": "Rang",
-    "manager": "Manager",
-    "points": "Points",
-    "roundPoints": "J{round}",
-    "total": "Total"
+    "page_title": "Classement",
+    "loading": "Chargement du classement…",
+    "refreshing": "Mise à jour…",
+    "error_title": "Impossible de charger le classement.",
+    "error_retry": "Vérifie ta connexion et réessaie.",
+    "empty_state": "Le classement sera disponible dès le début de la compétition.",
+    "table_aria_label": "Classement de la ligue",
+    "col_rank": "Rang",
+    "col_manager": "Manager",
+    "col_record": "V / D",
+    "col_points": "Points",
+    "you_badge": "Toi",
+    "you_badge_label": "C'est toi",
+    "points_unit": "pts",
+    "last_updated": "Mis à jour {time}"
   },
   "stats": {
     "title": "Statistiques",

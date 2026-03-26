@@ -161,6 +161,31 @@ now correctly produced by the DSG connector.
 
 ---
 
+## KB-009 — FastAPI JWT middleware uses HS256, Supabase project uses ES256
+
+**Status:** Open — blocks all authenticated endpoints in local dev
+**Affects:** `app/middleware/auth.py`
+
+**Symptom:** All protected FastAPI endpoints return HTTP 401 in local dev.
+Token header confirms `alg: ES256` but middleware hardcodes `JWT_ALGORITHM = "HS256"`.
+
+**Root cause:** Supabase changed the default JWT signing algorithm to ES256
+for projects created after mid-2024. The middleware was written assuming HS256.
+ES256 requires JWKS public key verification, not a symmetric secret.
+
+**Fix:** Replace HS256 verification in `auth.py` with JWKS-based ES256 verification:
+
+- Fetch public key from `{SUPABASE_URL}/auth/v1/.well-known/jwks.json`
+- Cache the key in memory (refresh on signature failure)
+- Pass `algorithms=["ES256"]` to `jwt.decode()`
+
+**Workaround:** None for local dev. Frontend empty/error states handle
+the 401 gracefully — no crash.
+
+**Target:** Fix before first real deploy (Phase 4 deploy step).
+
+---
+
 ## LIMITATION-001 — FastAPI restart mid-draft causes full state loss
 
 **Discovered:** 2026-03-21

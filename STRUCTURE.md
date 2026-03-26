@@ -64,6 +64,9 @@ backend/
 │   ├── routers/
 │   │   ├── __init__.py
 │   │   ├── health.py          # GET /health — liveness probe (public, no JWT)
+│   │   ├── leagues.py         # GET /leagues/{league_id}/standings
+│   │   │                      # StandingEntry, LeagueStandingsResponse
+│   │   │                      # Membership guard + JOIN users for display_name
 │   │   ├── lineup.py          # 4 endpoints: GET/PUT lineup, PATCH captain/kicker
 │   │   ├── trades.py          # 8 endpoints: POST /trades, GET /trades/{id},
 │   │   │                      # GET /leagues/{league_id}/trades,
@@ -395,6 +398,10 @@ frontend/
 │   │       │   │                      # passes currentUserId + data to DraftRoom (D-040)
 │   │       │   └── league/
 │   │       │       └── [leagueId]/
+│   │       │           ├── leaderboard/
+│   │       │           │   └── page.tsx   # Leaderboard page — Server Component
+│   │       │           │                  # SSR fetch (revalidate: 60s), passes initialData
+│   │       │           │                  # to LeaderboardTable for Realtime hydration
 │   │       │           └── roster/
 │   │       │               └── page.tsx   # Roster page — Server Component
 │   │       │                              # Fetches current round server-side (revalidate: 60s)
@@ -428,6 +435,11 @@ frontend/
 │   │   │   ├── RosterIRPanel.tsx          # IR slots (max 3), reintegration CTA, blocking alert
 │   │   │   └── RosterCaptainKickerBar.tsx # Captain (×1.5) + kicker designation
 │   │   │                                  # Mobile: fixed bottom bar. Desktop: inline.
+│   │   ├── leaderboard/
+│   │   │   ├── LeaderboardTable.tsx       # Standings table orchestrator — loading/error/empty states
+│   │   │   │                              # Assembles useLeaderboard + LeaderboardRow
+│   │   │   └── LeaderboardRow.tsx         # Single row atom — medal icons (top 3), current user highlight
+│   │   │                                  # Framer Motion staggered entry animation
 │   │   └── layout/
 │   │       ├── AppShell.tsx           # Layout wrapper: Sidebar + main + BottomNav
 │   │       ├── BottomNav.tsx          # Mobile fixed bottom nav — 5 items, Client Component
@@ -436,8 +448,10 @@ frontend/
 │   │   ├── useDraftRealtime.ts        # Supabase Realtime subscription + polling fallback
 │   │   │                              # Calls POST /connect on mount, POST /disconnect on unmount
 │   │   │                              # Polling every 5s when Realtime disconnected
-│   │   └── useRosters.ts              # Roster + lineup fetch, coverage computation,
-│   │                                  # lock status polling (30s), optimistic updates + rollback
+│   │   ├── useRosters.ts              # Roster + lineup fetch, coverage computation,
+│   │   │                              # lock status polling (30s), optimistic updates + rollback
+│   │   └── useLeaderboard.ts          # Standings fetch + Supabase Realtime Postgres Changes
+│   │                                  # Re-fetch strategy on CDC event, polling fallback 60s
 │   ├── i18n/
 │   │   ├── routing.ts                 # next-intl: supported locales, defaultLocale
 │   │   └── request.ts                 # next-intl: server-side locale resolution
@@ -448,6 +462,8 @@ frontend/
 │   └── types/
 │       ├── draft.ts                   # TypeScript mirror of FastAPI draft schemas
 │       │                              # DraftStateSnapshot, PickRecord, DraftUIState
+│       ├── leaderboard.ts             # StandingEntry, LeagueStandingsResponse
+│       │                              # TypeScript mirror of FastAPI leagues.py schemas
 │       ├── player.ts                  # TypeScript mirror of PlayerSummary (backend)
 │       └── roster.ts                  # RosterSlot, WeeklyLineupEntry, LineupUpdatePayload
 │                                      # RosterCoverageStatus, STARTER_POSITIONS, BENCH_COVERAGE_MINIMUMS

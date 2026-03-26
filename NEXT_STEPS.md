@@ -275,7 +275,14 @@
   - [x] `src/app/[locale]/(protected)/league/[leagueId]/roster/page.tsx` — Server Component, current round fetch
   - [x] `messages/fr.json` — all roster i18n keys added
   - [x] `src/components/layout/Sidebar.tsx` — fixed hydration mismatch (localStorage + Turbopack)
-- [ ] Leaderboard — live updates via Supabase Realtime
+- [x] Leaderboard — live updates via Supabase Realtime
+  - [x] `src/types/leaderboard.ts` — TypeScript mirror of LeagueStandingsResponse
+  - [x] `src/hooks/useLeaderboard.ts` — fetch + Supabase Realtime Postgres Changes + polling fallback
+  - [x] `src/components/leaderboard/LeaderboardRow.tsx` — row atom, medal icons, current user highlight
+  - [x] `src/components/leaderboard/LeaderboardTable.tsx` — full table, loading/error/empty states
+  - [x] `src/app/[locale]/(protected)/league/[leagueId]/leaderboard/page.tsx` — Server Component, SSR fetch
+  - [x] `backend/app/routers/leagues.py` — GET /leagues/{league_id}/standings
+  - [x] `messages/fr.json` — all leaderboard i18n keys added
 - [ ] Stats page — all filters (status, nationality/club, position, period, multi-criteria)
 - [ ] Dashboard — all active leagues, alerts, next opponent
 - [ ] Season archive page — past results per league
@@ -345,7 +352,7 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 
 ## Immediate next actions
 
-**→ Phase 4 in progress:** Draft Room ✅ — next: Roster management page
+**→ Phase 4 in progress:** Draft Room ✅ Roster ✅ Leaderboard ✅ — next: Stats page
 
 **→ Phase 1 remaining:** Cron Coolify config (after first deploy to Hetzner)
 

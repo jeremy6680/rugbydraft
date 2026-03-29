@@ -75,6 +75,10 @@ backend/
 │   │   │                      # POST /complete-expired (cron internal)
 │   │   ├── infirmary.py       # 3 endpoints: PUT /ir/place, PUT /ir/reintegrate,
 │   │   │                      # GET /ir/alerts — IR slot management (CDC §6.4)
+│   │   ├── stats.py           # GET /stats/players — aggregated player stats
+│   │   │                      # Params: competition_id, period, league_id (optional)
+│   │   │                      # Pool status enrichment: mine/drafted/free
+│   │   │                      # Source: mart_player_stats_ui (gold dbt table)
 │   │   ├── waivers.py         # 4 endpoints: POST/GET claims, DELETE cancel, POST process
 │   │   ├── draft.py           # POST /connect, POST /disconnect, GET /state
 │   │   └── draft_assisted.py  # POST /assisted/enable, POST /assisted/pick
@@ -398,6 +402,10 @@ frontend/
 │   │       │   │       └── page.tsx   # Draft Room page — Server Component
 │   │       │   │                      # Fetches players + manager names server-side,
 │   │       │   │                      # passes currentUserId + data to DraftRoom (D-040)
+    │       │   ├── stats/
+    │       │   │   └── page.tsx           # Stats page — Server Component
+    │       │   │                          # TODO: resolve competition_id from active league
+    │       │   │                          # Passes competitionId to StatsPageClient
 │   │       │   └── league/
 │   │       │       └── [leagueId]/
 │   │       │           ├── leaderboard/
@@ -442,6 +450,14 @@ frontend/
 │   │   │   │                              # Assembles useLeaderboard + LeaderboardRow
 │   │   │   └── LeaderboardRow.tsx         # Single row atom — medal icons (top 3), current user highlight
 │   │   │                                  # Framer Motion staggered entry animation
+│   │   ├── stats/
+│   │   │   ├── StatsPageClient.tsx        # Client Component shell — owns period + filter state
+│   │   │   │                              # Renders StatsFiltersBar + StatsTable
+│   │   │   ├── StatsFiltersBar.tsx        # Period tabs (1w/2w/4w/season), search input,
+│   │   │   │                              # position chips, pool status chips, club/nationality select
+│   │   │   └── StatsTable.tsx             # 4 column groups (points/attack/defence/discipline)
+│   │   │                                  # Sortable headers, sticky identity column, trend icons
+│   │   │                                  # Framer Motion row animations — scoring system v2 (D-039)
 │   │   └── layout/
 │   │       ├── AppShell.tsx           # Layout wrapper: Sidebar + main + BottomNav
 │   │       ├── BottomNav.tsx          # Mobile fixed bottom nav — 5 items, Client Component
@@ -452,8 +468,11 @@ frontend/
 │   │   │                              # Polling every 5s when Realtime disconnected
 │   │   ├── useRosters.ts              # Roster + lineup fetch, coverage computation,
 │   │   │                              # lock status polling (30s), optimistic updates + rollback
-│   │   └── useLeaderboard.ts          # Standings fetch + Supabase Realtime Postgres Changes
-│   │                                  # Re-fetch strategy on CDC event, polling fallback 60s
+│   │   ├── useLeaderboard.ts          # Standings fetch + Supabase Realtime Postgres Changes
+│   │   │                              # Re-fetch strategy on CDC event, polling fallback 60s
+│   │   └── usePlayerStats.ts          # Stats fetch + mock (USE_MOCK flag) + client-side
+│   │                                  # filtering (D-044). Period triggers re-fetch;
+│   │                                  # position/club/search/pool filtered via useMemo.
 │   ├── i18n/
 │   │   ├── routing.ts                 # next-intl: supported locales, defaultLocale
 │   │   └── request.ts                 # next-intl: server-side locale resolution

@@ -204,18 +204,72 @@
     "last_updated": "Mis à jour {time}"
   },
   "stats": {
-    "title": "Statistiques",
-    "player": "Joueur",
-    "position": "Poste",
-    "club": "Club",
-    "nationality": "Nationalité",
-    "totalPoints": "Points total",
-    "avgPoints": "Moy. points",
-    "tries": "Essais",
-    "tackles": "Plaquages",
-    "metres": "Mètres",
-    "turnovers": "Turnovers",
-    "noStats": "Aucune statistique disponible"
+    "title": "Statistiques joueurs",
+
+    "periodLabel": "Période",
+    "period1w": "1 sem.",
+    "period2w": "2 sem.",
+    "period4w": "4 sem.",
+    "periodSeason": "Saison",
+
+    "searchPlaceholder": "Rechercher un joueur…",
+    "filterClubNationality": "Club / Nationalité",
+    "filterPosition": "Filtrer par poste",
+    "filterPoolLabel": "Disponibilité",
+    "filterAll": "Tous",
+    "filterFree": "Libres",
+    "filterMine": "Mon équipe",
+    "clearFilters": "Réinitialiser",
+    "allPositions": "Tous les postes",
+
+    "groupPoints": "Points",
+    "groupAttack": "Attaque",
+    "groupDefence": "Défense",
+    "groupDiscipline": "Discipline",
+    "columnGroupLabel": "Groupes de colonnes",
+
+    "colPlayer": "Joueur",
+    "colTrend": "Tendance",
+    "colAvgPoints": "Moy.",
+    "colTotalPoints": "Total",
+    "colRoundsPlayed": "J. joués",
+    "colTries": "Essais",
+    "colTryAssists": "Passes déc.",
+    "colMetres": "Mètres",
+    "colKickAssists": "Assist. pied",
+    "colLineBreaks": "Cassures",
+    "colCatchFromKick": "Récept. coup de pied",
+    "colConversions": "Transf.",
+    "colPenalties": "Pénal.",
+    "colTackles": "Plaquages",
+    "colTurnoversWon": "Turnovers gagnés",
+    "colLineoutsWon": "Touches gagnées",
+    "colLineoutsLost": "Touches perdues",
+    "colTurnoversConceded": "Turnovers concédés",
+    "colMissedTackles": "Plaquages manqués",
+    "colHandlingErrors": "Erreurs ballon",
+    "colPenaltiesConceded": "Pénalités concédées",
+    "colYellowCards": "Cartons jaunes",
+    "colRedCards": "Cartons rouges",
+
+    "poolStatus": {
+      "mine": "Mon équipe",
+      "drafted": "Drafté",
+      "free": "Libre"
+    },
+
+    "availability": {
+      "available": "Disponible",
+      "injured": "Blessé",
+      "suspended": "Suspendu",
+      "doubtful": "Incertain"
+    },
+
+    "tableAriaLabel": "Statistiques des joueurs",
+    "rowCount": "{count} joueur(s)",
+    "loading": "Chargement des statistiques…",
+    "errorTitle": "Impossible de charger les statistiques.",
+    "noStats": "Aucune statistique disponible pour cette période."
   },
   "league": {
     "title": "Ma ligue",

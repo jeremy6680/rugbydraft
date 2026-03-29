@@ -1567,3 +1567,75 @@ where `localStorage` is undefined.
   window) must follow this same pattern: `useState(null)` + `useEffect` init.
 - The sidebar flashes its placeholder for one frame on cold load if the
   user had it collapsed — imperceptible in practice.
+
+---
+
+---
+
+## D-044 — Stats page: period is server-side, all other filters are client-side
+
+**Date:** 2026-03-29
+**Status:** Accepted
+
+**Context:** The Stats page (CDC §12) requires multiple filters: period
+(1w/2w/4w/season), position, club/nationality, pool status (all/free/mine),
+and a player name search. Two approaches were considered for applying these
+filters.
+
+**Options considered:**
+
+- A) All filters server-side — one API call per filter change, including
+  position/club/search. Minimal client memory, but high request frequency
+  and perceived latency on fast filter interactions.
+- B) Period server-side only — one API call per period change. Position,
+  club, search, pool status filtered client-side in memory.
+
+**Decision:** Option B — period is the only server-side parameter.
+
+**Rationale:**
+
+- Period is the only filter that changes the data volume: switching from
+  `season` to `1w` returns a structurally different aggregation. It must
+  go to the server.
+- Position, club, search, and pool status are pure projections of the
+  full dataset. With ~200–500 players per competition, client-side
+  filtering is instantaneous — no perceptible latency.
+- Fewer HTTP requests = faster perceived UX for filter interactions.
+- `mart_player_stats_ui` is pre-aggregated per period — one query returns
+  all players for that period. No benefit to pushing position/club filters
+  to the DB.
+
+**Consequences:**
+
+- `GET /stats/players` accepts `competition_id` + `period` + optional
+  `league_id` (for `pool_status` enrichment). No position/club params.
+- `usePlayerStats` hook holds the full player list in memory and
+  derives `filteredPlayers` via `useMemo` on every filter state change.
+- `availablePositions` and `availableClubs` are derived from the full
+  dataset — no separate endpoint needed.
+
+---
+
+## D-045 — Stats page: mock data flag in usePlayerStats for Phase 4 dev
+
+**Date:** 2026-03-29
+**Status:** Accepted (temporary — remove when pipeline populates DB)
+
+**Context:** `mart_player_stats_ui` is empty during Phase 4 development
+(no DSG data has been ingested yet). The Stats page frontend must be
+buildable and testable without a live database.
+
+**Decision:** `USE_MOCK = true` flag in `usePlayerStats.ts`. When true,
+the hook returns a hardcoded `MOCK_PLAYERS` array instead of calling the
+API. The mock covers all position types, all `pool_status` values, all
+`availability_status` values, and both `trend` directions.
+
+**Removal criteria:** Set `USE_MOCK = false` once `dbt run --target prod
+--select mart_player_stats_ui` completes successfully with real DSG data.
+
+**Consequences:**
+
+- No backend or DB required to develop/test the Stats page UI.
+- The mock flag is clearly documented with a `// TODO: remove` comment.
+- All 6 mock players use `competition_id: "00000000-0000-0000-0000-000000000099"`
+  — trivially distinguishable from real UUIDs.

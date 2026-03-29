@@ -283,15 +283,25 @@
   - [x] `src/app/[locale]/(protected)/league/[leagueId]/leaderboard/page.tsx` — Server Component, SSR fetch
   - [x] `backend/app/routers/leagues.py` — GET /leagues/{league_id}/standings
   - [x] `messages/fr.json` — all leaderboard i18n keys added
-- [ ] Stats page — all filters (status, nationality/club, position, period, multi-criteria)
-  - [x] `dbt_project/models/gold/mart_player_stats_ui.sql` — gold model, 4 periods (1w/2w/4w/season), trend computation
-  - [ ] `backend/app/routers/stats.py` — GET /stats/players
-  - [ ] `src/types/stats.ts`
-  - [ ] `src/hooks/usePlayerStats.ts`
-  - [ ] `src/components/stats/StatsFiltersBar.tsx`
-  - [ ] `src/components/stats/StatsTable.tsx`
-  - [ ] `src/app/[locale]/(protected)/stats/page.tsx`
-  - [ ] `messages/fr.json` — stats i18n keys- [ ] Dashboard — all active leagues, alerts, next opponent
+- [x] Stats page — all filters (status, nationality/club, position, period, multi-criteria)
+  - [x] `dbt_project/models/gold/mart_player_stats_ui.sql` — gold model updated: all D-039 stats,
+        total_points + avg_points, 4 periods (1w/2w/4w/season), trend computation
+  - [x] `backend/app/routers/stats.py` — GET /stats/players (competition_id + period + league_id)
+        pool_status enrichment (mine/drafted/free), PlayerStatsRow + PlayerStatsResponse
+  - [x] `backend/app/main.py` — stats_router registered
+  - [x] `src/types/stats.ts` — PlayerStatsRow, PlayerStatsResponse, StatsFilters,
+        StatsPeriod, PoolStatus, StatsTrend, StatsColumnGroup
+  - [x] `src/hooks/usePlayerStats.ts` — fetch + mock data + client-side filtering (D-044, D-045)
+  - [x] `src/components/stats/StatsFiltersBar.tsx` — period tabs, search, position chips,
+        pool status chips, club/nationality select, clear all
+  - [x] `src/components/stats/StatsTable.tsx` — 4 column groups (points/attack/defence/discipline),
+        sortable headers, sticky identity column, trend icons, Framer Motion rows
+  - [x] `src/components/stats/StatsPageClient.tsx` — Client Component shell
+  - [x] `src/app/[locale]/(protected)/stats/page.tsx` — Server Component page
+  - [x] `messages/fr.json` — all stats i18n keys added
+  - [ ] TODO: set USE_MOCK = false in usePlayerStats.ts once DSG pipeline populates DB
+  - [ ] TODO: resolve competition_id from user's active league in stats/page.tsx (currently hardcoded mock UUID)
+  - [ ] TODO: add prev_season period to mart_player_stats_ui (deferred — see D-044)
 - [ ] Season archive page — past results per league
 - [ ] Deploy to Hetzner via Coolify: `rugbydraft.app` live with HTTPS
 - [ ] Full axe-core accessibility audit — WCAG 2.1 AA
@@ -359,11 +369,16 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 
 ## Immediate next actions
 
-**→ Phase 4 in progress:** Draft Room ✅ Roster ✅ Leaderboard ✅ — next: Stats page
+**→ Phase 4 in progress:** Draft Room ✅ Roster ✅ Leaderboard ✅ Stats page ✅ — next: Dashboard
 
 **→ Phase 1 remaining:** Cron Coolify config (after first deploy to Hetzner)
 
 **→ Phase 4 deferred:** all integration tests (KB-004, KB-006, KB-007)
 
+**→ Phase 4 deferred:** USE_MOCK = false in usePlayerStats + real competition_id in stats page (after first DSG pipeline run)
+
 **→ TODO (Phase 4 follow-up):** expose `draft_order` in `DraftStateSnapshotResponse`
 so `DraftOrderPanel` can show the full upcoming snake order (not just current slot).
+
+**→ TODO (future):** add `prev_season` period to `mart_player_stats_ui` — requires
+`previous_competition_id` on the `competitions` table.

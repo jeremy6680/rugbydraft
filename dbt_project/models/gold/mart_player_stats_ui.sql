@@ -9,14 +9,19 @@
 -- The frontend filters by period on every fetch (approach D-044: period is
 -- a server-side parameter; position/status/club are filtered client-side).
 --
--- Stats aggregated:
---   avg_points, tries, try_assists, metres_carried, tackles, turnovers_won,
---   conversions_made, penalties_made, yellow_cards, red_cards
+-- Stats aggregated (all actions from D-039 scoring system):
+--   Attack : tries, try_assists, metres_carried, kick_assists, line_breaks,
+--            catch_from_kick, conversions_made, penalties_made
+--   Defence: tackles, turnovers_won, lineouts_won, lineouts_lost,
+--            turnovers_conceded, missed_tackles, handling_errors,
+--            penalties_conceded, yellow_cards, red_cards
+--   Points : total_points (sum), avg_points (mean) — based on raw_points
+--            from mart_fantasy_points (no captain multiplier applied).
 --
 -- Trend (CDC §12.3 "Tendance"):
 --   Compares avg_points for current period vs the equivalent preceding period.
---   up   → current > prev * 1.10  (≥ 10% above)
---   down → current < prev * 0.90  (≥ 10% below)
+--   up     → current > prev * 1.10  (≥ 10% above)
+--   down   → current < prev * 0.90  (≥ 10% below)
 --   stable → otherwise (includes no data for previous period)
 --
 -- Periods:
@@ -25,6 +30,9 @@
 --   4w     → last 4 rounds
 --   season → all completed rounds in the competition
 --
+-- prev_season period: deferred — see NEXT_STEPS.md
+--
+-- Scoring system: v2 — see DECISIONS.md D-039
 -- Materialized as: table (target: prod)
 -- =============================================================================
 
@@ -33,7 +41,8 @@
         materialized='table',
         description='Player stats aggregated by period for the Stats page. '
                     'One row per (player_id, competition_id, period). '
-                    'Periods: 1w | 2w | 4w | season.'
+                    'Periods: 1w | 2w | 4w | season. '
+                    'Scoring system v2 — D-039.'
     )
 }}
 
@@ -107,6 +116,10 @@ ranked_rounds as (
 -- All columns from pipeline_stg_match_stats are TEXT (export_silver_to_pg.py
 -- uses TEXT for all columns to avoid dtype-mapping issues). Cast to numeric
 -- here — once — so all downstream CTEs work with correct types.
+--
+-- raw_points from mart_fantasy_points is used for the points columns
+-- (not total_points which includes the captain multiplier — this page
+-- is global and captain designation is roster-specific).
 -- ---------------------------------------------------------------------------
 player_round_stats as (
 
@@ -117,25 +130,31 @@ player_round_stats as (
         mrm.recency_rank,
         mrm.total_rounds_completed,
 
-        -- Attack stats — cast TEXT → integer (COALESCE handles NULL/'')
-        coalesce(ms.tries::integer, 0)              as tries,
-        coalesce(ms.try_assists::integer, 0)        as try_assists,
-        coalesce(ms.metres_carried::integer, 0)     as metres_carried,
-        coalesce(ms.kick_assists::integer, 0)       as kick_assists,
-        coalesce(ms.line_breaks::integer, 0)        as line_breaks,
-        coalesce(ms.conversions_made::integer, 0)   as conversions_made,
-        coalesce(ms.penalties_made::integer, 0)     as penalties_made,
+        -- Attack stats (D-039)
+        coalesce(ms.tries::integer,              0)  as tries,
+        coalesce(ms.try_assists::integer,        0)  as try_assists,
+        coalesce(ms.metres_carried::integer,     0)  as metres_carried,
+        coalesce(ms.kick_assists::integer,       0)  as kick_assists,
+        coalesce(ms.line_breaks::integer,        0)  as line_breaks,
+        coalesce(ms.catch_from_kick::integer,    0)  as catch_from_kick,
+        -- Kicker stats: shown raw for all players (no kicker_flag here)
+        coalesce(ms.conversions_made::integer,   0)  as conversions_made,
+        coalesce(ms.penalties_made::integer,     0)  as penalties_made,
 
-        -- Defence stats — cast TEXT → integer
-        coalesce(ms.tackles::integer, 0)            as tackles,
-        coalesce(ms.turnovers_won::integer, 0)      as turnovers_won,
-        coalesce(ms.lineouts_won::integer, 0)       as lineouts_won,
-        coalesce(ms.lineouts_lost::integer, 0)      as lineouts_lost,
-        coalesce(ms.yellow_cards::integer, 0)       as yellow_cards,
-        coalesce(ms.red_cards::integer, 0)          as red_cards,
+        -- Defence stats (D-039)
+        coalesce(ms.tackles::integer,            0)  as tackles,
+        coalesce(ms.turnovers_won::integer,      0)  as turnovers_won,
+        coalesce(ms.lineouts_won::integer,       0)  as lineouts_won,
+        coalesce(ms.lineouts_lost::integer,      0)  as lineouts_lost,
+        coalesce(ms.turnovers_conceded::integer, 0)  as turnovers_conceded,
+        coalesce(ms.missed_tackles::integer,     0)  as missed_tackles,
+        coalesce(ms.handling_errors::integer,    0)  as handling_errors,
+        coalesce(ms.penalties_conceded::integer, 0)  as penalties_conceded,
+        coalesce(ms.yellow_cards::integer,       0)  as yellow_cards,
+        coalesce(ms.red_cards::integer,          0)  as red_cards,
 
-        -- Fantasy points — cast TEXT → numeric
-        coalesce(fp.total_points, 0)                as fantasy_points
+        -- Fantasy points — raw_points (no captain multiplier) for global page
+        coalesce(fp.raw_points, 0)                   as fantasy_points
 
     from {{ source('postgres', 'pipeline_stg_match_stats') }} ms
     inner join player_base pid
@@ -166,12 +185,14 @@ periods as (
     union all
     -- Season: use total_rounds_completed as the upper bound.
     -- prev period is undefined for season — trend is always 'stable'.
-    select 'season' as period, 9999 as max_rank, 0   as prev_max_rank, 0   as prev_min_rank
+    select 'season' as period, 9999 as max_rank, 0    as prev_max_rank, 0   as prev_min_rank
 
 ),
 
 -- ---------------------------------------------------------------------------
 -- Step 6: aggregate current period stats per (player, competition, period).
+-- total_points = sum of raw fantasy points over the period.
+-- avg_points   = mean of raw fantasy points over the period.
 -- ---------------------------------------------------------------------------
 current_period_stats as (
 
@@ -184,23 +205,34 @@ current_period_stats as (
         p.prev_min_rank,
 
         -- Rounds with data in this period
-        count(*)                                        as rounds_played,
+        count(*)                                            as rounds_played,
 
-        -- Fantasy points average
-        round(
-            avg(prs.fantasy_points)::numeric, 2
-        )                                               as avg_points,
+        -- Fantasy points
+        round(sum(prs.fantasy_points)::numeric,  2)        as total_points,
+        round(avg(prs.fantasy_points)::numeric,  2)        as avg_points,
 
-        -- Raw stat totals for the period
-        sum(prs.tries)::integer                         as tries,
-        sum(prs.try_assists)::integer                   as try_assists,
-        sum(prs.metres_carried)::integer                as metres_carried,
-        sum(prs.tackles)::integer                       as tackles,
-        sum(prs.turnovers_won)::integer                 as turnovers_won,
-        sum(prs.conversions_made)::integer              as conversions_made,
-        sum(prs.penalties_made)::integer                as penalties_made,
-        sum(prs.yellow_cards)::integer                  as yellow_cards,
-        sum(prs.red_cards)::integer                     as red_cards
+        -- Attack totals (D-039)
+        sum(prs.tries)::integer                            as tries,
+        sum(prs.try_assists)::integer                      as try_assists,
+        sum(prs.metres_carried)::integer                   as metres_carried,
+        sum(prs.kick_assists)::integer                     as kick_assists,
+        sum(prs.line_breaks)::integer                      as line_breaks,
+        sum(prs.catch_from_kick)::integer                  as catch_from_kick,
+        -- Kicker stats (raw — kicker_flag not applied here)
+        sum(prs.conversions_made)::integer                 as conversions_made,
+        sum(prs.penalties_made)::integer                   as penalties_made,
+
+        -- Defence totals (D-039)
+        sum(prs.tackles)::integer                          as tackles,
+        sum(prs.turnovers_won)::integer                    as turnovers_won,
+        sum(prs.lineouts_won)::integer                     as lineouts_won,
+        sum(prs.lineouts_lost)::integer                    as lineouts_lost,
+        sum(prs.turnovers_conceded)::integer               as turnovers_conceded,
+        sum(prs.missed_tackles)::integer                   as missed_tackles,
+        sum(prs.handling_errors)::integer                  as handling_errors,
+        sum(prs.penalties_conceded)::integer               as penalties_conceded,
+        sum(prs.yellow_cards)::integer                     as yellow_cards,
+        sum(prs.red_cards)::integer                        as red_cards
 
     from player_round_stats prs
     cross join periods p
@@ -249,7 +281,7 @@ prev_period_stats as (
 ),
 
 -- ---------------------------------------------------------------------------
--- Step 8: availability per player (for pool_status in the stats page).
+-- Step 8: availability per player (for availability_status in the stats page).
 -- ---------------------------------------------------------------------------
 player_availability as (
 
@@ -268,7 +300,7 @@ player_availability as (
 final as (
 
     select
-        cp.player_uuid              as player_id,
+        cp.player_uuid          as player_id,
         cp.competition_id,
         cp.period,
         pr.player_name,
@@ -279,17 +311,33 @@ final as (
         -- Availability (null → no data from provider → treat as available)
         coalesce(
             av.availability_status, 'available'
-        )                           as availability_status,
+        )                       as availability_status,
 
         cp.rounds_played,
+
+        -- Fantasy points
+        cp.total_points,
         cp.avg_points,
+
+        -- Attack (D-039)
         cp.tries,
         cp.try_assists,
         cp.metres_carried,
-        cp.tackles,
-        cp.turnovers_won,
+        cp.kick_assists,
+        cp.line_breaks,
+        cp.catch_from_kick,
         cp.conversions_made,
         cp.penalties_made,
+
+        -- Defence (D-039)
+        cp.tackles,
+        cp.turnovers_won,
+        cp.lineouts_won,
+        cp.lineouts_lost,
+        cp.turnovers_conceded,
+        cp.missed_tackles,
+        cp.handling_errors,
+        cp.penalties_conceded,
         cp.yellow_cards,
         cp.red_cards,
 
@@ -311,15 +359,15 @@ final as (
             when cp.avg_points < pp.prev_avg_points * 0.90
                 then 'down'
             else 'stable'
-        end                         as trend
+        end                     as trend
 
     from current_period_stats cp
     inner join player_ref pr
         on pr.player_uuid = cp.player_uuid
     left join prev_period_stats pp
-        on pp.player_uuid   = cp.player_uuid
+        on pp.player_uuid    = cp.player_uuid
         and pp.competition_id = cp.competition_id
-        and pp.period        = cp.period
+        and pp.period         = cp.period
     left join player_availability av
         on av.player_uuid = cp.player_uuid
 
@@ -327,7 +375,7 @@ final as (
 
 select
     {{ dbt_utils.generate_surrogate_key(['player_id', 'competition_id', 'period']) }}
-                                    as player_stats_ui_id,
+                                as player_stats_ui_id,
     player_id,
     competition_id,
     period,
@@ -337,16 +385,33 @@ select
     club,
     availability_status,
     rounds_played,
+
+    -- Fantasy points
+    total_points,
     avg_points,
+
+    -- Attack (D-039)
     tries,
     try_assists,
     metres_carried,
-    tackles,
-    turnovers_won,
+    kick_assists,
+    line_breaks,
+    catch_from_kick,
     conversions_made,
     penalties_made,
+
+    -- Defence (D-039)
+    tackles,
+    turnovers_won,
+    lineouts_won,
+    lineouts_lost,
+    turnovers_conceded,
+    missed_tackles,
+    handling_errors,
+    penalties_conceded,
     yellow_cards,
     red_cards,
+
     trend
 
 from final

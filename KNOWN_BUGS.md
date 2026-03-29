@@ -148,8 +148,6 @@ Same pattern as KB-004 and KB-006.
 
 ---
 
----
-
 ## KB-008 — Silver models not yet updated for DSG field mapping (scoring v2)
 
 **Status:** ✅ Resolved — 2026-03-23
@@ -183,6 +181,34 @@ ES256 requires JWKS public key verification, not a symmetric secret.
 the 401 gracefully — no crash.
 
 **Target:** Fix before first real deploy (Phase 4 deploy step).
+
+---
+
+## KB-010 — export_silver_to_pg.py: pandas incompatible with SQLAlchemy 2.x
+
+**Status:** ✅ Resolved — 2026-03-29
+**Affects:** `scripts/export_silver_to_pg.py`
+
+**Symptom:** `'Engine' object has no attribute 'cursor'` / `'Connection' object
+has no attribute 'cursor'` on every table export. All tables fail, verification
+reports stale row counts from previous run.
+
+**Root cause:** pandas `to_sql()` dropped support for raw SQLAlchemy Engine/Connection
+objects in versions that predate SQLAlchemy 2.x compatibility. The installed pandas
+version treated the SQLAlchemy object as a DBAPI2 connection and failed.
+
+**Fix:** Replaced pandas `to_sql()` + SQLAlchemy entirely with `psycopg2` direct
+connection + `cur.copy_expert()` (COPY FROM STDIN CSV). Faster, zero version
+dependency, schema always rebuilt from DuckDB silver on each run (DROP + CREATE TEXT).
+
+**Secondary fix:** All `pipeline_stg_*` columns are now TEXT in PostgreSQL.
+Gold models that read from these tables must cast numeric columns explicitly,
+e.g. `ms.tries::integer`. `is_first_match_of_round` must be compared as
+`= 'true'` (string), not `= true` (boolean).
+
+**Also fixed:** `DUCKDB_PATH` in `.env` was set to `../data/rugbydraft.duckdb`
+(relative to `dbt_project/`) — corrected to `data/rugbydraft.duckdb`
+(relative to project root, the only valid launch directory).
 
 ---
 

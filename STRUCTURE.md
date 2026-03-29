@@ -306,7 +306,9 @@ dbt_project/
 │       ├── mart_roster_scores.sql      # Aggregate points per roster per round
 │       ├── mart_leaderboard.sql        # League standings with DENSE_RANK + tiebreakers
 │       ├── mart_player_pool.sql        # Player availability per league (free/drafted/injured)
-│       └── mart_player_value.sql       # Default value score for autodraft + ghost team
+│       ├── mart_player_value.sql       # Default value score for autodraft + ghost team
+│       └── mart_player_stats_ui.sql   # Stats per player per period (1w/2w/4w/season)
+│                                      # Powers the Stats page — avg_points, trend, all scoring stats
 ├── tests/                              # dbt schema tests (not_null, unique, accepted_values)
 ├── models/schema.yml                   # Test definitions for bronze and silver layers
 ├── dbt_project.yml                     # dbt project configuration

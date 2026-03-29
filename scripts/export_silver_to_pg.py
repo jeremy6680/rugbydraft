@@ -22,7 +22,7 @@ Tables exported:
 
 The destination tables are prefixed with `pipeline_` to distinguish them
 from application tables managed by FastAPI. They are always replaced in
-full on each pipeline run (if_exists='replace') — no incremental logic.
+full on each pipeline run — no incremental logic.
 
 Usage:
     # From the project root:
@@ -38,6 +38,7 @@ Environment variables required (same as .env):
     SUPABASE_DB_PASSWORD  PostgreSQL password
 """
 
+import io
 import logging
 import os
 import sys
@@ -45,9 +46,8 @@ import time
 from typing import Final
 
 import duckdb
-import pandas as pd
-import sqlalchemy
-from sqlalchemy import text
+import psycopg2
+import psycopg2.extensions
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -64,8 +64,6 @@ log = logging.getLogger(__name__)
 # Configuration
 # ---------------------------------------------------------------------------
 
-# Silver tables to export. Order does not matter — no FK dependencies
-# between these tables in the pipeline schema.
 SILVER_TABLES: Final[list[str]] = [
     "stg_match_stats",
     "stg_matches",
@@ -74,15 +72,8 @@ SILVER_TABLES: Final[list[str]] = [
     "stg_player_availability",
 ]
 
-# Prefix used for destination tables in PostgreSQL.
-# Avoids naming conflicts with application tables.
 PIPELINE_PREFIX: Final[str] = "pipeline_"
-
-# Default DuckDB file path (relative to project root).
 DEFAULT_DUCKDB_PATH: Final[str] = "data/rugbydraft.duckdb"
-
-# dbt silver schema name in DuckDB.
-# Must match the schema configured in dbt_project.yml for the ci target.
 DUCKDB_SILVER_SCHEMA: Final[str] = "main_silver"
 
 
@@ -106,14 +97,14 @@ def get_duckdb_path() -> str:
     return path
 
 
-def get_pg_engine() -> sqlalchemy.engine.Engine:
-    """Build a SQLAlchemy engine for PostgreSQL (Supabase).
+def get_pg_conn() -> psycopg2.extensions.connection:
+    """Build a psycopg2 connection to PostgreSQL (Supabase).
 
     Reads credentials from environment variables. Raises SystemExit if any
     required variable is missing.
 
     Returns:
-        SQLAlchemy Engine connected to the Supabase PostgreSQL instance.
+        Open psycopg2 connection.
     """
     required_vars = ["SUPABASE_DB_HOST", "SUPABASE_DB_USER", "SUPABASE_DB_PASSWORD"]
     missing = [v for v in required_vars if not os.environ.get(v)]
@@ -122,38 +113,43 @@ def get_pg_engine() -> sqlalchemy.engine.Engine:
         log.error("Set them in .env and run: set -a && source .env && set +a")
         sys.exit(1)
 
-    host = os.environ["SUPABASE_DB_HOST"]
-    user = os.environ["SUPABASE_DB_USER"]
-    password = os.environ["SUPABASE_DB_PASSWORD"]
-
-    url = (
-        f"postgresql+psycopg2://{user}:{password}@{host}:5432/postgres?sslmode=require"
+    return psycopg2.connect(
+        host=os.environ["SUPABASE_DB_HOST"],
+        port=5432,
+        dbname="postgres",
+        user=os.environ["SUPABASE_DB_USER"],
+        password=os.environ["SUPABASE_DB_PASSWORD"],
+        sslmode="require",
     )
-    return sqlalchemy.create_engine(url, pool_pre_ping=True)
 
 
 def export_table(
     duck_conn: duckdb.DuckDBPyConnection,
-    pg_engine: sqlalchemy.engine.Engine,
+    pg_conn: psycopg2.extensions.connection,
     table_name: str,
 ) -> int:
     """Export one silver table from DuckDB to PostgreSQL.
 
-    Reads the full table from DuckDB and writes it to PostgreSQL using
-    pandas `to_sql` with `if_exists='replace'`. The destination table is
-    always fully replaced — no incremental logic.
+    Strategy:
+      1. Read full table from DuckDB into a pandas DataFrame.
+      2. DROP + CREATE the destination table in PostgreSQL using TEXT columns
+         — guarantees schema always matches DuckDB silver, avoids stale columns.
+      3. Stream rows via cur.copy_expert() (CSV over stdin) — fastest bulk
+         insert, no pandas/SQLAlchemy version dependency.
+      4. On any error: rollback the transaction so subsequent tables are
+         not blocked by a failed transaction state.
 
     Args:
         duck_conn: Open DuckDB connection.
-        pg_engine: SQLAlchemy engine for PostgreSQL.
+        pg_conn: Open psycopg2 connection.
         table_name: Silver table name (without schema prefix).
 
     Returns:
         Number of rows exported.
 
     Raises:
-        SystemExit: If the silver table does not exist in DuckDB (silver
-            pipeline has not been run yet).
+        SystemExit: If the silver table does not exist in DuckDB.
+        Exception: Re-raises after rollback on PostgreSQL errors.
     """
     destination = f"{PIPELINE_PREFIX}{table_name}"
     qualified = f"{DUCKDB_SILVER_SCHEMA}.{table_name}"
@@ -161,8 +157,9 @@ def export_table(
     log.info("Exporting %s → %s ...", qualified, destination)
     t0 = time.monotonic()
 
+    # Step 1: read from DuckDB.
     try:
-        df: pd.DataFrame = duck_conn.execute(f"SELECT * FROM {qualified}").df()
+        df = duck_conn.execute(f"SELECT * FROM {qualified}").fetchdf()
     except duckdb.CatalogException:
         log.error(
             "Table %s not found in DuckDB. "
@@ -172,6 +169,7 @@ def export_table(
         sys.exit(1)
 
     row_count = len(df)
+    columns = list(df.columns)
 
     if row_count == 0:
         log.warning(
@@ -180,17 +178,39 @@ def export_table(
             table_name,
         )
 
-    # Write to PostgreSQL. Replaces the table entirely on each run.
-    # chunksize prevents memory issues on large DataFrames.
-    df.to_sql(
-        name=destination,
-        con=pg_engine,
-        schema="public",
-        if_exists="replace",
-        index=False,
-        chunksize=1000,
-        method="multi",  # batch inserts — faster than row-by-row
-    )
+    # Step 2: DROP + CREATE with TEXT columns.
+    # TEXT for all columns: silver values are string/int/bool/float — all
+    # safely representable as TEXT. dbt gold casts them via PostgreSQL
+    # implicit conversion when needed.
+    col_defs = ", ".join(f'"{col}" TEXT' for col in columns)
+
+    try:
+        with pg_conn.cursor() as cur:
+            cur.execute(f'DROP TABLE IF EXISTS public."{destination}"')
+            cur.execute(f'CREATE TABLE public."{destination}" ({col_defs})')
+
+            if row_count > 0:
+                # Step 3: stream via copy_expert (CSV from StringIO buffer).
+                # copy_expert() is the correct psycopg2 API for COPY FROM STDIN.
+                # cur.execute("COPY ... FROM STDIN") is forbidden — copy_expert only.
+                buffer = io.StringIO()
+                df.to_csv(buffer, index=False, header=False, na_rep="")
+                buffer.seek(0)
+
+                col_list = ", ".join(f'"{c}"' for c in columns)
+                cur.copy_expert(
+                    f'COPY public."{destination}" ({col_list}) '
+                    f"FROM STDIN WITH (FORMAT CSV, NULL '')",
+                    buffer,
+                )
+
+        pg_conn.commit()
+
+    except Exception as exc:
+        # Step 4: rollback on error so subsequent table exports are not
+        # blocked by the aborted transaction state.
+        pg_conn.rollback()
+        raise exc
 
     elapsed = time.monotonic() - t0
     log.info("  ✓ %d rows exported in %.2fs", row_count, elapsed)
@@ -198,13 +218,13 @@ def export_table(
 
 
 def verify_export(
-    pg_engine: sqlalchemy.engine.Engine,
+    pg_conn: psycopg2.extensions.connection,
     table_name: str,
 ) -> bool:
     """Verify the exported table exists and has rows in PostgreSQL.
 
     Args:
-        pg_engine: SQLAlchemy engine for PostgreSQL.
+        pg_conn: Open psycopg2 connection.
         table_name: Silver table name (without prefix).
 
     Returns:
@@ -212,12 +232,13 @@ def verify_export(
     """
     destination = f"{PIPELINE_PREFIX}{table_name}"
     try:
-        with pg_engine.connect() as conn:
-            result = conn.execute(text(f'SELECT COUNT(*) FROM public."{destination}"'))
-            count = result.scalar()
+        with pg_conn.cursor() as cur:
+            cur.execute(f'SELECT COUNT(*) FROM public."{destination}"')
+            count = cur.fetchone()[0]
         log.info("  ✓ Verified %s: %d rows in PostgreSQL", destination, count)
         return True
     except Exception as exc:  # noqa: BLE001
+        pg_conn.rollback()
         log.error("  ✗ Verification failed for %s: %s", destination, exc)
         return False
 
@@ -226,8 +247,7 @@ def main() -> None:
     """Export all silver tables from DuckDB to PostgreSQL.
 
     Raises:
-        SystemExit: On any fatal error (missing file, missing env vars,
-            DuckDB table not found, PostgreSQL connection failure).
+        SystemExit: On any fatal error.
     """
     log.info("=" * 60)
     log.info("export_silver_to_pg — DuckDB → PostgreSQL bridge")
@@ -236,10 +256,9 @@ def main() -> None:
     duckdb_path = get_duckdb_path()
     log.info("DuckDB source: %s", duckdb_path)
 
-    pg_engine = get_pg_engine()
+    pg_conn = get_pg_conn()
     log.info("PostgreSQL target: %s", os.environ["SUPABASE_DB_HOST"])
 
-    # Open DuckDB connection (read-only — we never write to DuckDB here).
     duck_conn = duckdb.connect(duckdb_path, read_only=True)
 
     total_rows = 0
@@ -247,10 +266,9 @@ def main() -> None:
 
     for table_name in SILVER_TABLES:
         try:
-            rows = export_table(duck_conn, pg_engine, table_name)
+            rows = export_table(duck_conn, pg_conn, table_name)
             total_rows += rows
         except SystemExit:
-            # export_table calls sys.exit on fatal errors — re-raise.
             raise
         except Exception as exc:  # noqa: BLE001
             log.error("Unexpected error exporting %s: %s", table_name, exc)
@@ -258,10 +276,11 @@ def main() -> None:
 
     duck_conn.close()
 
-    # Verify all exports landed correctly in PostgreSQL.
     log.info("-" * 60)
     log.info("Verifying exports in PostgreSQL...")
-    all_ok = all(verify_export(pg_engine, t) for t in SILVER_TABLES)
+    all_ok = all(verify_export(pg_conn, t) for t in SILVER_TABLES)
+
+    pg_conn.close()
 
     log.info("=" * 60)
     if failed_tables:

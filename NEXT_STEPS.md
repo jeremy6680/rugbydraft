@@ -1,7 +1,7 @@
 # NEXT_STEPS.md — RugbyDraft
 
-> Current status: Phase 3 complete — scoring system v2 finalized. Ready for Phase 4.
-> Last updated: 2026-03-23
+> Current status: Phase 4 in progress — Stats page started (gold model done).
+> Last updated: 2026-03-29
 
 ---
 
@@ -284,7 +284,14 @@
   - [x] `backend/app/routers/leagues.py` — GET /leagues/{league_id}/standings
   - [x] `messages/fr.json` — all leaderboard i18n keys added
 - [ ] Stats page — all filters (status, nationality/club, position, period, multi-criteria)
-- [ ] Dashboard — all active leagues, alerts, next opponent
+  - [x] `dbt_project/models/gold/mart_player_stats_ui.sql` — gold model, 4 periods (1w/2w/4w/season), trend computation
+  - [ ] `backend/app/routers/stats.py` — GET /stats/players
+  - [ ] `src/types/stats.ts`
+  - [ ] `src/hooks/usePlayerStats.ts`
+  - [ ] `src/components/stats/StatsFiltersBar.tsx`
+  - [ ] `src/components/stats/StatsTable.tsx`
+  - [ ] `src/app/[locale]/(protected)/stats/page.tsx`
+  - [ ] `messages/fr.json` — stats i18n keys- [ ] Dashboard — all active leagues, alerts, next opponent
 - [ ] Season archive page — past results per league
 - [ ] Deploy to Hetzner via Coolify: `rugbydraft.app` live with HTTPS
 - [ ] Full axe-core accessibility audit — WCAG 2.1 AA

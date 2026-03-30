@@ -1,7 +1,7 @@
 # NEXT_STEPS.md — RugbyDraft
 
 > Current status: Phase 4 in progress — Stats page started (gold model done).
-> Last updated: 2026-03-29
+> Last updated: 2026-03-30
 
 ---
 
@@ -374,6 +374,8 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 **→ Phase 1 remaining:** Cron Coolify config (after first deploy to Hetzner)
 
 **→ Phase 4 deferred:** all integration tests (KB-004, KB-006, KB-007)
+
+**→ KB-009 resolved 2026-03-30:** JWKS/ES256 auth middleware — see `app/middleware/auth.py`
 
 **→ Phase 4 deferred:** USE_MOCK = false in usePlayerStats + real competition_id in stats page (after first DSG pipeline run)
 

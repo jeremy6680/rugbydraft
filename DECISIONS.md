@@ -1639,3 +1639,54 @@ API. The mock covers all position types, all `pool_status` values, all
 - The mock flag is clearly documented with a `// TODO: remove` comment.
 - All 6 mock players use `competition_id: "00000000-0000-0000-0000-000000000099"`
   — trivially distinguishable from real UUIDs.
+
+---
+
+## D-046 — JWT middleware: JWKS/ES256 replacing HS256 for Supabase auth
+
+**Date:** 2026-03-30
+**Status:** Accepted
+**Supersedes:** nothing — extends the existing auth middleware (KB-009 fix)
+
+**Context:** Supabase changed the default JWT signing algorithm to ES256 (ECDSA
+P-256) for projects created after mid-2024. The original middleware hardcoded
+HS256 (symmetric HMAC), causing all authenticated endpoints to return 401.
+ES256 is an asymmetric algorithm: Supabase signs with a private key; consumers
+verify with the public key exposed at a standard JWKS endpoint.
+
+**Options considered:**
+
+- A) Switch entirely to ES256, remove HS256 support.
+- B) Auto-detect algorithm from the JWT header (`alg` claim).
+- C) Support both via an explicit env var (`SUPABASE_JWT_ALGORITHM`), defaulting to ES256.
+
+**Decision:** Option C — explicit env var, default ES256.
+
+**Rationale:**
+
+- Option A breaks local Supabase (`supabase start`) which still uses HS256.
+- Option B reads the `alg` claim from the untrusted token header before
+  verification — this is an algorithm confusion attack vector. Never trust
+  the token's own `alg` claim to select the verification algorithm.
+- Option C is explicit, auditable, and safe. The algorithm is configured
+  server-side, never derived from the incoming token.
+
+**Implementation:**
+
+- `app/config.py`: `supabase_jwt_algorithm` field added (default: `"ES256"`).
+- `app/middleware/auth.py`: `_verify_token_es256()` (async, JWKS cache + retry
+  on key rotation) and `_verify_token_hs256()` (sync, symmetric secret).
+  `AuthMiddleware.dispatch()` branches on `settings.supabase_jwt_algorithm`.
+- JWKS key is cached in `_jwks_cache` module-level variable. Cache is
+  invalidated and refreshed on `JWKError` / `JWTError` (key rotation).
+  `ExpiredSignatureError` is not retried — expiry is definitive.
+- `backend/tests/test_auth.py`: 8 tests covering both paths.
+
+**Consequences:**
+
+- `.env` must set `SUPABASE_JWT_ALGORITHM=ES256` (production) or `HS256`
+  (local Supabase with `supabase start`).
+- The JWKS endpoint must be reachable from FastAPI at startup. If unreachable,
+  the first authenticated request returns 401 (no crash, no retry loop).
+- `supabase_jwt_secret` is kept in `Settings` for HS256 fallback and reference,
+  but is no longer used in ES256 mode.

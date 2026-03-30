@@ -27,7 +27,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        case_sensitive=False,  # DATABASE_URL and database_url are equivalent
+        case_sensitive=False,
+        extra="ignore",  # silently ignore vars not declared in Settings (e.g. dbt/pipeline vars)
     )
 
     # ── Application ───────────────────────────────────────────────────────────
@@ -50,7 +51,19 @@ class Settings(BaseSettings):
     )
     supabase_jwt_secret: str = Field(
         ...,
-        description="JWT secret used to verify Supabase Auth tokens",
+        description=(
+            "JWT secret from the Supabase dashboard (API > JWT Settings). "
+            "Used for HS256 verification (older projects) and kept for reference. "
+            "For ES256 projects (post-mid-2024), verification uses the JWKS endpoint instead."
+        ),
+    )
+    supabase_jwt_algorithm: str = Field(
+        default="ES256",
+        description=(
+            "JWT signing algorithm used by this Supabase project. "
+            "ES256 for projects created after mid-2024 (default). "
+            "HS256 for older projects or local Supabase (supabase start)."
+        ),
     )
 
     # ── Database ──────────────────────────────────────────────────────────────

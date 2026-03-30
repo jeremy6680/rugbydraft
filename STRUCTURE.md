@@ -2,7 +2,7 @@
 
 > Repository structure explained.
 > Updated at each phase — reflects the current state of the codebase.
-> Last updated: 2026-03-23 (feat/scoring-v2-dsg — scoring system v2, DSG field mapping)
+> Last updated: 2026-03-30 (fix/kb-009-jwks-auth — ES256 JWKS verification, test_auth.py)
 
 ---
 
@@ -58,9 +58,12 @@ backend/
 │   │                      # via pydantic-settings. Never hardcode secrets.
 │   ├── middleware/
 │   │   ├── __init__.py
-│   │   └── auth.py        # JWT verification middleware (Supabase Auth tokens)
-│   │                      # Global opt-out model — all routes protected by default
-│   │                      # Public routes whitelisted in PUBLIC_PATHS
+│   │   └── auth.py     # JWT verification middleware (Supabase Auth tokens)
+│   │                   # ES256 (default): JWKS public key, in-memory cache,
+│   │                   # single retry on key rotation. HS256: opt-in via
+│   │                   # SUPABASE_JWT_ALGORITHM=HS256 (local Supabase / older projects).
+│   │                   # Global opt-out model — all routes protected by default.
+│   │                   # Public routes whitelisted in PUBLIC_PATHS.
 │   ├── routers/
 │   │   ├── __init__.py
 │   │   ├── health.py          # GET /health — liveness probe (public, no JWT)
@@ -180,6 +183,10 @@ backend/
 │   ├── test_fantasy_points.py  # 39 tests — scoring system v2 (D-039): attack, defence,
 │   │                           # captain multiplier, kicker-only, full player profiles
 │   ├── test_health.py       # 8 tests — health endpoint + auth middleware
+│   ├── test_auth.py         # 8 tests — ES256 JWKS verification (valid/wrong-sig/expired/
+│   │                        # JWKS-failure/key-rotation) + HS256 (valid/wrong-secret/expired)
+│   ├── conftest.py          # Loads backend/.env before collection regardless of cwd
+│   │                        # Fixes KB-003: Settings() crash when pytest run from repo root
 │   ├── test_lineup.py       # 14 tests: Pydantic, lock, IR, multi-position, captain/kicker CDC 6.6
 │   ├── test_reconnection.py # 4 tests — reconnection protocol (D-025)
 │   │                        # reconnect during own turn, after timer expired,
@@ -211,8 +218,11 @@ backend/
 
 ### Key architectural notes
 
-- `config.py` uses `pydantic-settings` — missing required env vars cause
-  immediate startup failure with a clear error message.
+- `config.py` uses `pydantic-settings` (`extra="ignore"`) — missing required
+  env vars cause immediate startup failure. Unknown vars (e.g. dbt/pipeline
+  vars from the root `.env`) are silently ignored.
+- `middleware/auth.py` — ES256 by default (JWKS), HS256 opt-in via
+  `SUPABASE_JWT_ALGORITHM=HS256`. See DECISIONS.md D-046.
 - `middleware/auth.py` is global opt-out — every route is protected unless
   explicitly added to `PUBLIC_PATHS`.
 - `routers/health.py` returns HTTP 200 always — `status: degraded` when DB

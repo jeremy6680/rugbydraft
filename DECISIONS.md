@@ -1769,3 +1769,105 @@ The query failed because leagues uses `is_archived BOOLEAN` instead.
 - `DashboardLeague.league_status` is always derived, never read from DB.
 - The select must use `is_archived` not `status`.
 - Future routers touching leagues must be aware of this schema design.
+
+---
+
+---
+
+## D-050 — Scoring system: off_loads, missed_conversion_goals, missed_penalty_goals activated (supersedes D-039 partially)
+
+**Date:** 2026-04-02
+**Status:** Accepted
+**Partially supersedes:** D-039 (three rules reinstated; the rest of D-039 remains valid)
+
+**Context:** D-039 removed offloads (+1), conversion missed (-0.5), and penalty
+missed (-1) from the scoring system because the corresponding DSG XML fields were
+absent from the player_stats node at the time of validation (match 3798425,
+2026-03-23). On 2026-04-02, DSG confirmed activation of additional stats fields
+on the trial feed following a request to Rajesh D'Souza (VP Sales & Partnerships).
+Re-validation on match 3798425 confirmed all six new fields are present as XML
+attributes on every `<people>` element.
+
+**New fields confirmed present in DSG XML (2026-04-02 re-validation):**
+
+| DSG XML attribute         | Non-empty values observed            |
+| ------------------------- | ------------------------------------ |
+| `off_loads`               | ✅ Yes — e.g. Sowakula 3, T. Ramos 3 |
+| `defenders_beaten`        | ✅ Yes — e.g. T. Ramos 6, Jauneau 4  |
+| `missed_conversion_goals` | ✅ Yes — e.g. H. Plummer 1           |
+| `missed_penalty_goals`    | ✅ Present, empty on this match      |
+| `drop_goals_converted`    | ✅ Present, empty on this match      |
+| `drop_goal_missed`        | ✅ Present, empty on this match      |
+
+**Important bug discovered:** The DSG XML attribute is `off_loads` (with underscore),
+not `offloads`. The connector (`connectors/dsg.py`) was looking for `offloads` —
+a silent zero-read. Fixed in this decision's implementation.
+
+**Decision — fields integrated into scoring (D-050):**
+
+| Action            | Points | DSG field                 | Applies to  |
+| ----------------- | ------ | ------------------------- | ----------- |
+| Offload           | +1     | `off_loads`               | All         |
+| Conversion missed | -0.5   | `missed_conversion_goals` | Kicker only |
+| Penalty missed    | -1.0   | `missed_penalty_goals`    | Kicker only |
+
+**Decision — fields deferred to V2:**
+
+- `defenders_beaten` — not in CDC scoring; game-design impact unvalidated.
+- `drop_goals_converted` / `drop_goal_missed` — drops are rare in Top 14;
+  marginal scoring impact. Revisit if frequency data justifies inclusion.
+
+**Rationale:**
+
+- `off_loads` was in the original CDC scoring and removed only due to data absence.
+  Reinstating it restores the intended system.
+- `missed_conversion_goals` and `missed_penalty_goals` were also removed in D-039
+  for the same reason. Now available directly — no computation needed.
+- Missed kicks apply kicker-only (multiplied by `kicker_flag` in dbt) for the
+  same reason as made kicks: a non-designated player who boots a one-off kick
+  should not be penalised in fantasy.
+- `defenders_beaten` and drop goal fields are deferred to avoid unvalidated
+  game-design changes mid-development.
+
+**Updated scoring table (full — D-039 + D-050):**
+
+| Action                | Points | DSG field                  | Applies to            |
+| --------------------- | ------ | -------------------------- | --------------------- |
+| Metre carried (per m) | +0.1   | `carries_metres`           | All                   |
+| Try scored            | +5     | scores (event type="try")  | All                   |
+| Try assist            | +2     | `try_assists`              | All                   |
+| Turnover won          | +2     | `turnover_won`             | All                   |
+| Line break            | +1     | `line_breaks`              | All                   |
+| Kick assist           | +1     | `try_kicks`                | All                   |
+| Offload               | +1     | `off_loads`                | All                   |
+| Catch from kick       | +0.5   | `catch_from_kick`          | All                   |
+| Tackle                | +0.5   | `tackles`                  | All                   |
+| Lineout won           | +1     | `lineouts_won`             | Thrower (all)         |
+| Lineout lost          | -0.5   | `lineouts_lost`            | Thrower (all)         |
+| Turnovers conceded    | -0.5   | `turnovers_conceded`       | All                   |
+| Missed tackle         | -0.5   | `missed_tackles`           | All                   |
+| Handling error        | -0.5   | `handling_error`           | All                   |
+| Penalty conceded      | -1     | `penalties_conceded`       | All                   |
+| Yellow card           | -2     | bookings (yellow_card)     | All                   |
+| Red card              | -3     | bookings (red_card)        | All                   |
+| Conversion made       | +2     | `conversion_goals`         | Kicker only           |
+| Penalty kick made     | +3     | `goals - conversion_goals` | Kicker only           |
+| Conversion missed     | -0.5   | `missed_conversion_goals`  | Kicker only           |
+| Penalty missed        | -1.0   | `missed_penalty_goals`     | Kicker only           |
+| Captain multiplier    | ×1.5   | —                          | Captain (nearest 0.5) |
+
+**Conditional stats (COALESCE to 0 if absent from API response):**
+`line_breaks`, `catch_from_kick`, `lineouts_won`, `lineouts_lost`,
+`try_kicks`, `handling_error`, `turnovers_conceded`, `off_loads`,
+`missed_conversion_goals`, `missed_penalty_goals`
+
+**Files to update (feat/scoring-d050 branch):**
+
+- `connectors/base.py` — `PlayerMatchStats`: add `offloads`, `missed_conversions`,
+  `missed_penalties` fields
+- `connectors/dsg.py` — `_parse_one_player()`: fix `off_loads` attribute name,
+  add `missed_conversion_goals`, `missed_penalty_goals`
+- `dbt_project/models/gold/mart_fantasy_points.sql` — add 3 stats through all CTEs,
+  add `offload_pts`, `missed_conversion_pts`, `missed_penalty_pts` to breakdown
+- `dbt_project/models/gold/mart_player_stats_ui.sql` — add `offloads` to display stats
+- `CONTEXT.md` — update scoring summary section

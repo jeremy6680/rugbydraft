@@ -380,18 +380,35 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 
 ## Immediate next actions
 
-**→ Phase 4 in progress:** Draft Room ✅ Roster ✅ Leaderboard ✅ Stats page ✅ Dashboard ✅ — next: test dashboard with real league + fix KB-011
+**→ Phase 4 in progress:** Draft Room ✅ Roster ✅ Leaderboard ✅ Stats page ✅ Dashboard ✅
 
-**→ Next session :** create a true league in Supabase (competition + league + league_member) in order to test the dashboard with real data, and fix KB-011 in `leagues.py` and `stats.py` (await missing on .execute()).
+**→ Next session (priority 1):** Create a real league in Supabase (competition + league +
+league_member) to test the dashboard with real data, and fix KB-011 in `leagues.py`
+and `stats.py` (missing `await` on `.execute()`). Still on branch `phase/4-frontend`.
+
+**→ Next session (priority 2):** `feat/scoring-d050` branch (from `phase/4-frontend`):
+implement D-050 scoring additions — fix `off_loads` bug, add `offloads` (+1),
+`missed_conversion_goals` (-0.5 kicker), `missed_penalty_goals` (-1 kicker)
+in `connectors/base.py`, `connectors/dsg.py`, `mart_fantasy_points.sql`,
+`mart_player_stats_ui.sql`. Merge back into `phase/4-frontend` before Phase 4 PR.
 
 **→ Phase 1 remaining:** Cron Coolify config (after first deploy to Hetzner)
 
 **→ Phase 4 deferred:** all integration tests (KB-004, KB-006, KB-007)
 
-**→ Phase 4 deferred:** USE_MOCK = false in usePlayerStats + real competition_id in stats page (after first DSG pipeline run)
+**→ Phase 4 deferred:** USE_MOCK = false in usePlayerStats + real competition_id in
+stats page (after first DSG pipeline run)
 
 **→ TODO (Phase 4 follow-up):** expose `draft_order` in `DraftStateSnapshotResponse`
 so `DraftOrderPanel` can show the full upcoming snake order (not just current slot).
 
 **→ TODO (future):** add `prev_season` period to `mart_player_stats_ui` — requires
 `previous_competition_id` on the `competitions` table.
+
+**→ TODO (V2):** evaluate `defenders_beaten`, `drop_goals_converted`,
+`drop_goal_missed` for scoring inclusion (DSG fields confirmed present — deferred
+pending game-design validation, see D-050).
+
+**→ Business:** DSG billing is annual upfront (1 500 € / 12 months).
+Launch Ulule campaign to validate project before signing. Break-even ~100 paying
+subscribers (see D-037).

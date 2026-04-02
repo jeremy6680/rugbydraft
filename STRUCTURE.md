@@ -2,7 +2,7 @@
 
 > Repository structure explained.
 > Updated at each phase — reflects the current state of the codebase.
-> Last updated: 2026-03-30 (fix/kb-009-jwks-auth — ES256 JWKS verification, test_auth.py)
+> Last updated: 2026-04-02 (feat/dashboard — GET /dashboard, dashboard page, D-047/D-048/D-049)
 
 ---
 
@@ -82,6 +82,10 @@ backend/
 │   │   │                      # Params: competition_id, period, league_id (optional)
 │   │   │                      # Pool status enrichment: mine/drafted/free
 │   │   │                      # Source: mart_player_stats_ui (gold dbt table)
+│   │   ├── dashboard.py       # GET /dashboard — BFF aggregator: all active leagues
+│   │   │                      # with rank, last round score, alerts (injuries/waivers/trades)
+│   │   │                      # leagues.is_archived filter applied in Python (D-048, D-049)
+│   │   ├── players.py         # GET /players
 │   │   ├── waivers.py         # 4 endpoints: POST/GET claims, DELETE cancel, POST process
 │   │   ├── draft.py           # POST /connect, POST /disconnect, GET /state
 │   │   └── draft_assisted.py  # POST /assisted/enable, POST /assisted/pick
@@ -406,7 +410,9 @@ frontend/
 │   │       ├── (protected)/           # Route group — authenticated pages only
 │   │       │   ├── layout.tsx         # Session guard (getUser) + AppShell wrapper
 │   │       │   ├── dashboard/
-│   │       │   │   └── page.tsx       # Dashboard placeholder (replaced in Phase 4)
+│   │       │   │   └── page.tsx       # Dashboard — Server Component (D-047)
+│   │       │   │                      # 0 leagues → empty state, 1 league → redirect,
+│   │       │   │                      # 2+ leagues → cards grid
 │   │       │   ├── draft/
 │   │       │   │   └── [draftId]/
 │   │       │   │       └── page.tsx   # Draft Room page — Server Component
@@ -468,6 +474,10 @@ frontend/
 │   │   │   └── StatsTable.tsx             # 4 column groups (points/attack/defence/discipline)
 │   │   │                                  # Sortable headers, sticky identity column, trend icons
 │   │   │                                  # Framer Motion row animations — scoring system v2 (D-039)
+│   │   ├── dashboard/
+│   │   │   ├── DashboardEmptyState.tsx    # Empty state — join/create CTAs (zero leagues)
+│   │   │   ├── DashboardAlertBadge.tsx    # Alert chip: injured/recovered/waiver/trade/AI
+│   │   │   └── DashboardLeagueCard.tsx    # League summary card: rank, score, alerts, draft CTA
 │   │   └── layout/
 │   │       ├── AppShell.tsx           # Layout wrapper: Sidebar + main + BottomNav
 │   │       ├── BottomNav.tsx          # Mobile fixed bottom nav — 5 items, Client Component
@@ -491,6 +501,8 @@ frontend/
 │   │       ├── client.ts              # createBrowserSupabaseClient — Client Components
 │   │       └── server.ts              # createServerSupabaseClient — Server Components
 │   └── types/
+│       ├── dashboard.ts               # DashboardResponse, DashboardLeague, DashboardAlert
+│       │                              # TypeScript mirror of FastAPI dashboard.py schemas
 │       ├── draft.ts                   # TypeScript mirror of FastAPI draft schemas
 │       │                              # DraftStateSnapshot, PickRecord, DraftUIState
 │       ├── leaderboard.ts             # StandingEntry, LeagueStandingsResponse

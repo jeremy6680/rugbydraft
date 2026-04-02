@@ -56,12 +56,27 @@
     "title": "Tableau de bord",
     "myLeagues": "Mes ligues",
     "noLeagues": "Vous n'avez pas encore de ligue.",
+    "noLeaguesHint": "Rejoignez une ligue existante avec un code d'invitation, ou créez la vôtre.",
     "createLeague": "Créer une ligue",
     "joinLeague": "Rejoindre une ligue",
     "nextDraft": "Prochain draft",
     "nextMatch": "Prochain match",
     "currentRound": "Journée {round}",
-    "alerts": "Alertes"
+    "points": "pts",
+    "rank": "Rang",
+    "goToLeague": "Voir la ligue",
+    "commissioner": "Commissaire",
+    "commissionerBadge": "Vous êtes commissaire de cette ligue",
+    "draftInProgress": "Draft en cours — rejoindre",
+    "draftUpcoming": "Draft à venir — se préparer",
+    "alertsLabel": "Alertes de la ligue",
+    "alerts": {
+      "player_injured": "{name} est blessé(e)",
+      "player_recovered": "{name} est guéri(e) — à réintégrer",
+      "waiver_open": "Fenêtre waiver ouverte",
+      "trade_proposed": "Trade en attente",
+      "ai_report_ready": "Rapport IA disponible"
+    }
   },
   "draft": {
     "title": "Salle de draft",

@@ -212,6 +212,25 @@ e.g. `ms.tries::integer`. `is_first_match_of_round` must be compared as
 
 ---
 
+## KB-011 — leagues.py and stats.py use sync .execute() on AsyncClient
+
+**Date:** 2026-04-02
+**Severity:** Latent — will crash when called with real data
+
+**Context:** `get_supabase_client()` returns an `AsyncClient` (via `acreate_client`).
+All `.execute()` calls on `AsyncClient` must be awaited. `dashboard.py` was fixed.
+`leagues.py` and `stats.py` still call `.execute()` without `await`.
+
+**Impact:** These endpoints will raise `AttributeError: 'coroutine' object has no
+attribute 'data'` when called with a real authenticated session.
+
+**Fix:** Add `await` before every `.execute()` call in both files. Same pattern
+applied in `dashboard.py`.
+
+**Priority:** Fix before testing leaderboard or stats pages with real data.
+
+---
+
 ## LIMITATION-001 — FastAPI restart mid-draft causes full state loss
 
 **Discovered:** 2026-03-21

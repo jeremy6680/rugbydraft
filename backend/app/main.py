@@ -22,6 +22,7 @@ from slowapi.util import get_remote_address
 from app.config import settings
 from app.middleware.auth import AuthMiddleware
 from app.routers import draft, draft_assisted, health, leagues, trades, waivers
+from app.routers.dashboard import router as dashboard_router  # Phase 4 — Dashboard
 from app.routers.lineup import router as lineup_router
 from app.routers.infirmary import router as infirmary_router
 from app.routers.players import router as players_router
@@ -140,3 +141,4 @@ app.include_router(lineup_router)
 app.include_router(infirmary_router)
 app.include_router(players_router)
 app.include_router(stats_router)  # Phase 4 — Stats page
+app.include_router(dashboard_router)  # Phase 4 — Dashboard

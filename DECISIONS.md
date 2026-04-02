@@ -1690,3 +1690,82 @@ verify with the public key exposed at a standard JWKS endpoint.
   the first authenticated request returns 401 (no crash, no retry loop).
 - `supabase_jwt_secret` is kept in `Settings` for HS256 fallback and reference,
   but is no longer used in ES256 mode.
+
+---
+
+## D-047 — Dashboard: server-side redirect when user has exactly one active league
+
+**Date:** 2026-04-02
+**Status:** Accepted
+
+**Context:** The Dashboard page (CDC §5.2) shows all active leagues for the user.
+When a user has exactly one league, showing the dashboard is redundant — they
+would immediately navigate to that league anyway.
+
+**Decision:** If `GET /dashboard` returns exactly one league, the Server Component
+performs a server-side `redirect()` to `/[locale]/league/[leagueId]/leaderboard`.
+Zero client flash. The user can always navigate back to `/dashboard` via the sidebar.
+
+**Consequences:**
+
+- Users with one league never see the dashboard grid — they land directly in their league.
+- If the user later joins a second league, the redirect stops and the grid is shown.
+- The redirect is locale-aware (`getLocale()` from next-intl/server).
+
+---
+
+## D-048 — Supabase PostgREST: joined table column filters must be applied in Python
+
+**Date:** 2026-04-02
+**Status:** Accepted
+
+**Context:** The dashboard endpoint needed to exclude archived leagues. The initial
+implementation used `.neq("leagues.status", "archived")` on the PostgREST query
+builder, which resulted in `column leagues_1.status does not exist` (HTTP 400).
+
+**Finding:** The Supabase Python SDK does not support filtering on columns of
+embedded/joined tables via the standard `.neq()` / `.eq()` methods. PostgREST
+interprets `leagues.status` as a direct column alias on the join result, not as
+a filter on the nested table. This applies to all relational filters on joined tables.
+
+**Decision:** Fetch the full result set and filter joined-table columns in Python
+after `.execute()`. This is a PostgREST SDK limitation, not a bug.
+
+**Rule for all future routers:** Never use `.eq()` / `.neq()` / `.filter()` on
+dotted column paths (e.g. `"table.column"`) — apply those filters in Python.
+
+**Consequences:**
+
+- All dashboard helpers fetch slightly more data than strictly needed (no joined-column WHERE clause).
+- Filtering in Python is negligible for the expected data volumes (< 50 leagues per user).
+- This pattern is documented here to prevent the same mistake in future endpoints.
+
+---
+
+## D-049 — leagues table uses is_archived boolean, not a status enum
+
+**Date:** 2026-04-02
+**Status:** Accepted
+
+**Context:** The dashboard router originally used `leagues.status` in both the
+select and filter, assuming the leagues table had a status column (like competitions).
+The query failed because leagues uses `is_archived BOOLEAN` instead.
+
+**Finding:** The schema (001_initial_schema.sql) defines leagues with:
+
+- `is_archived BOOLEAN NOT NULL DEFAULT FALSE`
+  No `status` column exists. The `league_status` field in the API response is
+  derived at runtime from draft state, not stored in the DB.
+
+**Decision:** `league_status` in `DashboardLeague` is computed as follows:
+
+- draft active → "drafting"
+- draft pending → "upcoming"
+- no draft (or completed) → "active"
+- is_archived = true → excluded from dashboard (filtered in Python)
+
+**Consequences:**
+
+- `DashboardLeague.league_status` is always derived, never read from DB.
+- The select must use `is_archived` not `status`.
+- Future routers touching leagues must be aware of this schema design.

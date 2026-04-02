@@ -302,6 +302,17 @@
   - [ ] TODO: set USE_MOCK = false in usePlayerStats.ts once DSG pipeline populates DB
   - [ ] TODO: resolve competition_id from user's active league in stats/page.tsx (currently hardcoded mock UUID)
   - [ ] TODO: add prev_season period to mart_player_stats_ui (deferred — see D-044)
+- [x] Dashboard page — multi-league hub, empty state, single-league auto-redirect (D-047)
+  - [x] `backend/app/routers/dashboard.py` — GET /dashboard (BFF aggregator)
+  - [x] `frontend/src/types/dashboard.ts` — TypeScript mirror
+  - [x] `frontend/src/components/dashboard/DashboardEmptyState.tsx`
+  - [x] `frontend/src/components/dashboard/DashboardAlertBadge.tsx`
+  - [x] `frontend/src/components/dashboard/DashboardLeagueCard.tsx`
+  - [x] `frontend/src/app/[locale]/(protected)/dashboard/page.tsx`
+  - [x] `messages/fr.json` — all dashboard i18n keys added
+  - [x] `backend/.env` — SUPABASE_ANON_KEY populated (was placeholder)
+  - [ ] TODO: league card → test with real league data once created in Supabase
+  - [ ] TODO: next_opponent field (deferred — requires schedule query)
 - [ ] Season archive page — past results per league
 - [ ] Deploy to Hetzner via Coolify: `rugbydraft.app` live with HTTPS
 - [ ] Full axe-core accessibility audit — WCAG 2.1 AA

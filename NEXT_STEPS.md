@@ -313,6 +313,7 @@
   - [x] `backend/.env` — SUPABASE_ANON_KEY populated (was placeholder)
   - [x] TODO: league card → tested with real league data (seed 002_test_league.sql)
   - [ ] TODO: next_opponent field (deferred — requires schedule query)
+- [x] Swagger UI — Bearer auth scheme (`custom_openapi` in `main.py`, public paths excluded)
 - [ ] Season archive page — past results per league
 - [ ] Deploy to Hetzner via Coolify: `rugbydraft.app` live with HTTPS
 - [ ] Full axe-core accessibility audit — WCAG 2.1 AA
@@ -380,11 +381,9 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 
 ## Immediate next actions
 
-**→ Phase 4 in progress:** Draft Room ✅ Roster ✅ Leaderboard ✅ Stats page ✅ Dashboard ✅ — next: fix Swagger UI (add Bearer auth scheme), then Phase 4 PR
+**→ Phase 4 in progress:** Draft Room ✅ Roster ✅ Leaderboard ✅ Stats page ✅ Dashboard ✅ Swagger UI ✅ — next: `feat/scoring-d050`, then Phase 4 PR
 
-**→ Next session:** add Bearer auth scheme to Swagger UI (main.py custom_openapi), then Phase 4 PR.
-
-**→ Next session (priority 2):** `feat/scoring-d050` branch (from `phase/4-frontend`):
+**→ Next session (priority 1):** `feat/scoring-d050` branch (from `phase/4-frontend`):
 implement D-050 scoring additions — fix `off_loads` bug, add `offloads` (+1),
 `missed_conversion_goals` (-0.5 kicker), `missed_penalty_goals` (-1 kicker)
 in `connectors/base.py`, `connectors/dsg.py`, `mart_fantasy_points.sql`,

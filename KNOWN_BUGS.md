@@ -215,19 +215,25 @@ e.g. `ms.tries::integer`. `is_first_match_of_round` must be compared as
 ## KB-011 — leagues.py and stats.py use sync .execute() on AsyncClient
 
 **Date:** 2026-04-02
-**Severity:** Latent — will crash when called with real data
+**Status:** ✅ Resolved — 2026-04-04
+**Affects:** `backend/app/routers/leagues.py`, `backend/app/routers/stats.py`
 
 **Context:** `get_supabase_client()` returns an `AsyncClient` (via `acreate_client`).
-All `.execute()` calls on `AsyncClient` must be awaited. `dashboard.py` was fixed.
-`leagues.py` and `stats.py` still call `.execute()` without `await`.
+All `.execute()` calls on `AsyncClient` must be awaited. `dashboard.py` was fixed
+in a previous session. `leagues.py` and `stats.py` still called `.execute()` without
+`await`.
 
-**Impact:** These endpoints will raise `AttributeError: 'coroutine' object has no
+**Impact:** These endpoints raised `AttributeError: 'coroutine' object has no
 attribute 'data'` when called with a real authenticated session.
 
-**Fix:** Add `await` before every `.execute()` call in both files. Same pattern
-applied in `dashboard.py`.
+**Fix applied:**
 
-**Priority:** Fix before testing leaderboard or stats pages with real data.
+- `leagues.py` — added `await` before every `.execute()` call (2 occurrences:
+  `_assert_league_member()` and `get_league_standings()`).
+- `stats.py` — added `await` before every `.execute()` call (3 occurrences:
+  `_get_roster_player_ids()` ×2 and `get_player_stats()`).
+- `stats.py` — also fixed silent bug: `roster_players` table reference renamed
+  to `roster_slots` (correct table name per schema).
 
 ---
 

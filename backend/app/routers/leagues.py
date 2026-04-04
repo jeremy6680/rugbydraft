@@ -69,7 +69,7 @@ async def _assert_league_member(
         HTTPException: 500 on unexpected database error.
     """
     try:
-        result = (
+        result = await (
             supabase.table("league_members")
             .select("id")
             .eq("league_id", str(league_id))
@@ -133,7 +133,7 @@ async def get_league_standings(
 
     # Fetch standings joined with user display names
     try:
-        result = (
+        result = await (
             supabase.table("league_standings")
             .select(
                 "rank, member_id, wins, losses, total_points, updated_at, "

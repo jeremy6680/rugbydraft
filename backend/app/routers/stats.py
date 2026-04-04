@@ -144,7 +144,7 @@ async def _get_roster_player_ids(
     """
     try:
         # Fetch all rosters in the league with their owner user_id.
-        rosters_result = (
+        rosters_result = await (
             supabase.table("rosters")
             .select("id, user_id")
             .eq("league_id", str(league_id))
@@ -169,16 +169,14 @@ async def _get_roster_player_ids(
 
     try:
         # Fetch all player assignments across all rosters in the league.
-        rp_result = (
-            supabase.table("roster_players")
+        rp_result = await (
+            supabase.table("roster_slots")
             .select("roster_id, player_id")
             .in_("roster_id", roster_ids)
             .execute()
         )
     except Exception as exc:
-        logger.error(
-            "DB error fetching roster_players for league %s: %s", league_id, exc
-        )
+        logger.error("DB error fetching roster_slots for league %s: %s", league_id, exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Database error while fetching roster players.",
@@ -277,7 +275,7 @@ async def get_player_stats(
     """
     # Step 1: fetch stats rows from mart_player_stats_ui.
     try:
-        result = (
+        result = await (
             supabase.table("mart_player_stats_ui")
             .select("*")
             .eq("competition_id", str(competition_id))

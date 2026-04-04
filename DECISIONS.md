@@ -1772,8 +1772,6 @@ The query failed because leagues uses `is_archived BOOLEAN` instead.
 
 ---
 
----
-
 ## D-050 — Scoring system: off_loads, missed_conversion_goals, missed_penalty_goals activated (supersedes D-039 partially)
 
 **Date:** 2026-04-02

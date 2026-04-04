@@ -311,7 +311,7 @@
   - [x] `frontend/src/app/[locale]/(protected)/dashboard/page.tsx`
   - [x] `messages/fr.json` — all dashboard i18n keys added
   - [x] `backend/.env` — SUPABASE_ANON_KEY populated (was placeholder)
-  - [ ] TODO: league card → test with real league data once created in Supabase
+  - [x] TODO: league card → tested with real league data (seed 002_test_league.sql)
   - [ ] TODO: next_opponent field (deferred — requires schedule query)
 - [ ] Season archive page — past results per league
 - [ ] Deploy to Hetzner via Coolify: `rugbydraft.app` live with HTTPS
@@ -380,11 +380,9 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 
 ## Immediate next actions
 
-**→ Phase 4 in progress:** Draft Room ✅ Roster ✅ Leaderboard ✅ Stats page ✅ Dashboard ✅
+**→ Phase 4 in progress:** Draft Room ✅ Roster ✅ Leaderboard ✅ Stats page ✅ Dashboard ✅ — next: fix Swagger UI (add Bearer auth scheme), then Phase 4 PR
 
-**→ Next session (priority 1):** Create a real league in Supabase (competition + league +
-league_member) to test the dashboard with real data, and fix KB-011 in `leagues.py`
-and `stats.py` (missing `await` on `.execute()`). Still on branch `phase/4-frontend`.
+**→ Next session:** add Bearer auth scheme to Swagger UI (main.py custom_openapi), then Phase 4 PR.
 
 **→ Next session (priority 2):** `feat/scoring-d050` branch (from `phase/4-frontend`):
 implement D-050 scoring additions — fix `off_loads` bug, add `offloads` (+1),

@@ -193,7 +193,15 @@ function SortableHeader({
 }) {
   const isActive = sort.key === columnKey;
   return (
-    <th scope="col" className="px-3 py-2 text-right">
+    <th
+      aria-sort={
+        isActive
+          ? sort.direction === "asc"
+            ? "ascending"
+            : "descending"
+          : "none"
+      }
+    >
       <button
         type="button"
         onClick={() => onSort(columnKey)}
@@ -203,13 +211,6 @@ function SortableHeader({
             ? "text-primary"
             : "text-muted-foreground hover:text-foreground",
         ].join(" ")}
-        aria-sort={
-          isActive
-            ? sort.direction === "asc"
-              ? "ascending"
-              : "descending"
-            : "none"
-        }
       >
         {label}
         {isActive ? (

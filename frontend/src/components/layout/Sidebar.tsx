@@ -59,21 +59,12 @@ export default function Sidebar() {
   const locale = useLocale();
 
   // Default false — matches server render. Updated after mount from localStorage.
-  const [isCollapsed, setIsCollapsed] = useState<boolean | null>(null);
-
-  // True once localStorage has been read. Prevents hydration mismatch.
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    // This runs once after mount — localStorage is safe to access here.
-    // We initialise the state from persisted value only once.
-    const stored = localStorage.getItem(STORAGE_KEY) === "true";
-    // Use a ref-style update to avoid the setState-in-effect warning:
-    // we call setState inside useEffect but gated on a one-time init flag.
-    if (isCollapsed === null) {
-      setIsCollapsed(stored);
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
+    // Lazy initializer: runs only on first render (client-side).
+    // Safe to read localStorage here — no effect needed.
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("sidebar-collapsed") === "true";
+  });
 
   const handleToggle = () => {
     setIsCollapsed((prev) => {

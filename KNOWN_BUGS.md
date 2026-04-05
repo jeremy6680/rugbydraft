@@ -148,8 +148,6 @@ Same pattern as KB-004 and KB-006.
 
 ---
 
----
-
 ## KB-008 — Silver models not yet updated for DSG field mapping (scoring v2)
 
 **Status:** ✅ Resolved — 2026-03-23
@@ -158,6 +156,84 @@ responses and maps all field names to the `PlayerMatchStats` contract.
 `connectors/tests/test_dsg_connector.py` — 33 tests passing.
 The silver model `stg_match_stats.sql` references DSG field names that are
 now correctly produced by the DSG connector.
+
+---
+
+## KB-009 — FastAPI JWT middleware uses HS256, Supabase project uses ES256
+
+**Status:** ✅ Resolved — 2026-03-30
+**Affects:** `app/middleware/auth.py`
+
+**Symptom:** All protected FastAPI endpoints returned HTTP 401 in local dev.
+Token header confirmed `alg: ES256` but middleware hardcoded `JWT_ALGORITHM = "HS256"`.
+
+**Root cause:** Supabase changed the default JWT signing algorithm to ES256
+for projects created after mid-2024. ES256 requires JWKS public key verification,
+not a symmetric secret.
+
+**Fix applied:**
+
+- `app/middleware/auth.py` rewritten — ES256 path fetches the Supabase JWKS
+  public key from `{SUPABASE_URL}/auth/v1/.well-known/jwks.json`, caches it
+  in memory, refreshes on signature failure (key rotation). HS256 path preserved
+  as opt-in via `SUPABASE_JWT_ALGORITHM=HS256`.
+- `app/config.py` — `supabase_jwt_algorithm` field added (default: `ES256`).
+- `.env.example` — `SUPABASE_JWT_ALGORITHM=ES256` documented.
+- `backend/tests/test_auth.py` — 8 new tests (ES256 valid/invalid/expired/JWKS
+  failure/key rotation, HS256 valid/invalid/expired). All passing.
+
+---
+
+## KB-010 — export_silver_to_pg.py: pandas incompatible with SQLAlchemy 2.x
+
+**Status:** ✅ Resolved — 2026-03-29
+**Affects:** `scripts/export_silver_to_pg.py`
+
+**Symptom:** `'Engine' object has no attribute 'cursor'` / `'Connection' object
+has no attribute 'cursor'` on every table export. All tables fail, verification
+reports stale row counts from previous run.
+
+**Root cause:** pandas `to_sql()` dropped support for raw SQLAlchemy Engine/Connection
+objects in versions that predate SQLAlchemy 2.x compatibility. The installed pandas
+version treated the SQLAlchemy object as a DBAPI2 connection and failed.
+
+**Fix:** Replaced pandas `to_sql()` + SQLAlchemy entirely with `psycopg2` direct
+connection + `cur.copy_expert()` (COPY FROM STDIN CSV). Faster, zero version
+dependency, schema always rebuilt from DuckDB silver on each run (DROP + CREATE TEXT).
+
+**Secondary fix:** All `pipeline_stg_*` columns are now TEXT in PostgreSQL.
+Gold models that read from these tables must cast numeric columns explicitly,
+e.g. `ms.tries::integer`. `is_first_match_of_round` must be compared as
+`= 'true'` (string), not `= true` (boolean).
+
+**Also fixed:** `DUCKDB_PATH` in `.env` was set to `../data/rugbydraft.duckdb`
+(relative to `dbt_project/`) — corrected to `data/rugbydraft.duckdb`
+(relative to project root, the only valid launch directory).
+
+---
+
+## KB-011 — leagues.py and stats.py use sync .execute() on AsyncClient
+
+**Date:** 2026-04-02
+**Status:** ✅ Resolved — 2026-04-04
+**Affects:** `backend/app/routers/leagues.py`, `backend/app/routers/stats.py`
+
+**Context:** `get_supabase_client()` returns an `AsyncClient` (via `acreate_client`).
+All `.execute()` calls on `AsyncClient` must be awaited. `dashboard.py` was fixed
+in a previous session. `leagues.py` and `stats.py` still called `.execute()` without
+`await`.
+
+**Impact:** These endpoints raised `AttributeError: 'coroutine' object has no
+attribute 'data'` when called with a real authenticated session.
+
+**Fix applied:**
+
+- `leagues.py` — added `await` before every `.execute()` call (2 occurrences:
+  `_assert_league_member()` and `get_league_standings()`).
+- `stats.py` — added `await` before every `.execute()` call (3 occurrences:
+  `_get_roster_player_ids()` ×2 and `get_player_stats()`).
+- `stats.py` — also fixed silent bug: `roster_players` table reference renamed
+  to `roster_slots` (correct table name per schema).
 
 ---
 

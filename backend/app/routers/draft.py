@@ -6,6 +6,7 @@ Endpoints:
     POST /draft/{league_id}/connect     — register as connected, get snapshot
     POST /draft/{league_id}/disconnect  — register as disconnected
     GET  /draft/{league_id}/state       — get full state snapshot (polling fallback)
+    POST /draft/{league_id}/pick        — submit a manual pick
 
 Architecture (D-001):
     All state mutations go through the DraftEngine, retrieved from the
@@ -29,10 +30,16 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, HTTPException, Request, status
+from pydantic import BaseModel, Field
 
 from app.schemas.draft import DraftStateSnapshotResponse, PickRecordResponse
 from draft.engine import DraftStateSnapshot
 from draft.registry import DraftRegistry
+from draft.validate_pick import (
+    NotYourTurnError,
+    PickValidationError,
+    PlayerAlreadyDraftedError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +47,24 @@ router = APIRouter(
     prefix="/draft",
     tags=["draft"],
 )
+
+
+# ---------------------------------------------------------------------------
+# Request schemas
+# ---------------------------------------------------------------------------
+
+
+class PickRequest(BaseModel):
+    """Request body for POST /draft/{league_id}/pick.
+
+    Attributes:
+        player_id: UUID of the player being drafted.
+    """
+
+    player_id: str = Field(
+        ...,
+        description="UUID of the player to draft.",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -212,7 +237,6 @@ async def disconnect_from_draft(
     )
 
     await engine.disconnect_manager(manager_id)
-    # 204 No Content — no response body
 
 
 @router.get(
@@ -247,7 +271,7 @@ async def get_draft_state(
         HTTPException 401: If not authenticated.
         HTTPException 404: If no active draft exists for this league.
     """
-    _get_manager_id(request)  # authentication check — result not used here
+    _get_manager_id(request)
     registry = _get_registry(request)
 
     engine = registry.get(league_id)
@@ -258,4 +282,86 @@ async def get_draft_state(
         )
 
     snapshot = engine.get_state_snapshot()
+    return _snapshot_to_response(snapshot)
+
+
+@router.post(
+    "/{league_id}/pick",
+    response_model=DraftStateSnapshotResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Submit a manual pick",
+    description=(
+        "Submit a pick for the authenticated manager. "
+        "The manager must be the current active picker — FastAPI validates "
+        "turn order, player availability, and roster constraints. "
+        "Returns the updated full state snapshot after the pick is recorded. "
+        "The new state is also broadcast via Supabase Realtime to all clients."
+    ),
+)
+async def submit_pick(
+    league_id: str,
+    body: PickRequest,
+    request: Request,
+) -> DraftStateSnapshotResponse:
+    """Submit a manual player pick for the authenticated manager.
+
+    Validates:
+        - Manager is authenticated (JWT).
+        - An active draft exists for this league.
+        - It is this manager's turn (NotYourTurnError → 409).
+        - The player is available (PlayerAlreadyDraftedError → 409).
+        - Roster constraints are satisfied (PickValidationError → 422).
+
+    Args:
+        league_id: The league whose draft to pick in.
+        body: Contains the player_id to draft.
+        request: FastAPI request (carries auth state and app state).
+
+    Returns:
+        Full updated draft state snapshot.
+
+    Raises:
+        HTTPException 401: If not authenticated.
+        HTTPException 404: If no active draft exists for this league.
+        HTTPException 409: If it is not the manager's turn or player already drafted.
+        HTTPException 422: If the pick violates roster constraints.
+    """
+    manager_id = _get_manager_id(request)
+    registry = _get_registry(request)
+
+    engine = registry.get(league_id)
+    if engine is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No active draft for league '{league_id}'.",
+        )
+
+    logger.info(
+        "Manager '%s' submitting pick: player_id='%s' league='%s'",
+        manager_id,
+        body.player_id,
+        league_id,
+    )
+
+    try:
+        snapshot = await engine.submit_pick(
+            manager_id=manager_id,
+            player_id=body.player_id,
+        )
+    except NotYourTurnError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except PlayerAlreadyDraftedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except PickValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
     return _snapshot_to_response(snapshot)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
@@ -31,31 +31,25 @@ interface NavItem {
   icon: React.ElementType;
 }
 
-// localStorage key for persisting the collapsed state across sessions.
+// localStorage key for persisting collapsed state across sessions.
 const STORAGE_KEY = "rugbydraft:sidebar-collapsed";
 
 // ---------------------------------------------------------------------------
 // Sidebar
 // ---------------------------------------------------------------------------
-// Desktop-only navigation sidebar (hidden on mobile — AppShell renders
-// BottomNav instead).
+// Desktop-only navigation sidebar (hidden on mobile — BottomNav is used instead).
 //
 // Two states:
-//   - Expanded (240px): logo text + icon + label for each nav item
+//   - Expanded (240px): logo text + icon + label
 //   - Collapsed (64px): initials "RD" + icon only (tooltip on hover)
 //
-// Collapsed state is persisted in localStorage.
-//
-// Hydration strategy: the component renders null until mounted.
-// This avoids a server/client mismatch on the collapsed state,
-// since localStorage is only available in the browser.
-// The sidebar appears after the first client paint — imperceptible in practice.
-//
-// Accessibility:
-//   - <nav> landmark with aria-label
-//   - aria-current="page" on active link
-//   - aria-expanded on the toggle button
-//   - Tooltips on collapsed items (keyboard + mouse accessible)
+// Hydration strategy:
+//   - Server renders the sidebar in its default expanded state (collapsed=false).
+//   - After mount, useEffect reads localStorage and updates if needed.
+//   - The `mounted` flag prevents rendering until localStorage is read,
+//     avoiding a flash of the wrong state.
+//   - While !mounted, we render a same-width placeholder so the layout
+//     does not shift when the sidebar appears.
 // ---------------------------------------------------------------------------
 
 export default function Sidebar() {
@@ -64,15 +58,14 @@ export default function Sidebar() {
   const pathname = usePathname();
   const locale = useLocale();
 
-  // Initialize from localStorage via lazy initializer — runs once on mount,
-  // client-side only. Returns undefined during SSR (localStorage unavailable),
-  // which triggers the `return null` guard below to prevent hydration mismatch.
-  const [isCollapsed, setIsCollapsed] = useState<boolean | undefined>(() => {
-    if (typeof window === "undefined") return undefined;
-    return localStorage.getItem(STORAGE_KEY) === "true";
+  // Default false — matches server render. Updated after mount from localStorage.
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
+    // Lazy initializer: runs only on first render (client-side).
+    // Safe to read localStorage here — no effect needed.
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("sidebar-collapsed") === "true";
   });
 
-  // Persist to localStorage on every toggle.
   const handleToggle = () => {
     setIsCollapsed((prev) => {
       const next = !prev;
@@ -114,63 +107,72 @@ export default function Sidebar() {
     },
   ];
 
-  // Render nothing until the client has read localStorage.
-  // This keeps the server-rendered HTML and client HTML in sync.
-  if (isCollapsed === undefined) return null;
+  // ---------------------------------------------------------------------------
+  // Pre-mount placeholder
+  // Renders an empty sidebar shell with the correct default width.
+  // Keeps layout stable while localStorage is being read.
+  // ---------------------------------------------------------------------------
+
+  if (isCollapsed === null) {
+    return (
+      <div
+        aria-hidden="true"
+        className="hidden md:flex h-screen w-60 shrink-0 bg-foreground border-r border-border"
+      />
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Main render
+  // ---------------------------------------------------------------------------
 
   return (
     <TooltipProvider delayDuration={300}>
       <aside
         className={`
           hidden md:flex flex-col
-          h-screen sticky top-0
+          h-screen sticky top-0 shrink-0
           bg-foreground text-primary-foreground
           border-r border-border
           transition-all duration-200 ease-in-out overflow-hidden
           ${isCollapsed ? "w-16" : "w-60"}
         `}
       >
-        {/* ----------------------------------------------------------------
-            Header: logo + toggle button
-        ---------------------------------------------------------------- */}
+        {/* Header: logo + toggle button */}
         <div className="flex h-16 items-center justify-between px-3 shrink-0">
-          {!isCollapsed && (
+          {isCollapsed ? (
+            <span className="text-rose-100 font-semibold text-sm mx-auto">
+              RD
+            </span>
+          ) : (
             <span className="text-rose-100 font-semibold text-sm tracking-wide truncate">
               RugbyDraft
             </span>
           )}
 
-          {isCollapsed && (
-            <span className="text-rose-100 font-semibold text-sm mx-auto">
-              RD
-            </span>
-          )}
-
           <button
-            onClick={handleToggle}
             aria-expanded={!isCollapsed}
             aria-label={isCollapsed ? tSidebar("expand") : tSidebar("collapse")}
             className={`
               flex items-center justify-center
-              w-8 h-8 rounded-md
+              w-8 h-8 rounded-md shrink-0
               text-rose-100 opacity-60
               hover:opacity-100 hover:bg-crimson-500
               transition-all duration-150
-              shrink-0
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crimson-400
               ${isCollapsed ? "mx-auto" : "ml-2"}
             `}
+            onClick={handleToggle}
           >
             {isCollapsed ? (
-              <PanelLeftOpen size={16} aria-hidden="true" />
+              <PanelLeftOpen aria-hidden="true" size={16} />
             ) : (
-              <PanelLeftClose size={16} aria-hidden="true" />
+              <PanelLeftClose aria-hidden="true" size={16} />
             )}
           </button>
         </div>
 
-        {/* ----------------------------------------------------------------
-            Navigation items
-        ---------------------------------------------------------------- */}
+        {/* Navigation items */}
         <nav aria-label={tSidebar("ariaLabel")} className="flex-1 px-2 py-2">
           <ul className="flex flex-col gap-1" role="list">
             {navItems.map((item) => {
@@ -179,12 +181,12 @@ export default function Sidebar() {
 
               const linkContent = (
                 <Link
-                  href={item.href}
                   aria-current={isActive ? "page" : undefined}
                   className={`
                     flex items-center gap-3
                     rounded-md px-2 py-2
                     transition-colors duration-150
+                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crimson-400
                     ${
                       isActive
                         ? "bg-crimson-500/20 border-l-2 border-primary text-rose-100"
@@ -192,12 +194,13 @@ export default function Sidebar() {
                     }
                     ${isCollapsed ? "justify-center" : ""}
                   `}
+                  href={item.href}
                 >
                   <Icon
-                    size={18}
-                    strokeWidth={isActive ? 2.25 : 1.75}
                     aria-hidden="true"
                     className="shrink-0"
+                    size={18}
+                    strokeWidth={isActive ? 2.25 : 1.75}
                   />
                   {!isCollapsed && (
                     <span className="text-sm font-medium truncate">

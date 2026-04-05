@@ -116,7 +116,11 @@ resolved_stats as (
         coalesce(ms.penalties_conceded, 0)              as penalties_conceded,
         -- Cards resolved by connector — stored flat in pipeline_stg_match_stats
         coalesce(ms.yellow_cards, 0)                    as yellow_cards,
-        coalesce(ms.red_cards, 0)                       as red_cards
+        coalesce(ms.red_cards, 0)                       as red_cards,
+        -- D-050: new scoring fields
+        coalesce(ms.off_loads, 0)                       as off_loads,
+        coalesce(ms.missed_conversion_goals, 0)         as missed_conversion_goals,
+        coalesce(ms.missed_penalty_goals, 0)            as missed_penalty_goals
 
     from {{ source('postgres', 'pipeline_stg_match_stats') }} ms
     inner join player_id_map pid
@@ -162,7 +166,11 @@ lineup_stats as (
         coalesce(rs.handling_errors, 0)                 as handling_errors,
         coalesce(rs.penalties_conceded, 0)              as penalties_conceded,
         coalesce(rs.yellow_cards, 0)                    as yellow_cards,
-        coalesce(rs.red_cards, 0)                       as red_cards
+        coalesce(rs.red_cards, 0)                       as red_cards,
+        -- D-050: new scoring fields
+        coalesce(rs.off_loads, 0)                       as off_loads,
+        coalesce(rs.missed_conversion_goals, 0)         as missed_conversion_goals,
+        coalesce(rs.missed_penalty_goals, 0)            as missed_penalty_goals
 
     from {{ source('postgres', 'weekly_lineups') }} wl
     left join resolved_stats rs
@@ -206,7 +214,12 @@ point_components as (
         ls.handling_errors    * (-0.5)                  as handling_error_pts,
         ls.penalties_conceded * (-1.0)                  as penalty_conceded_pts,
         ls.yellow_cards       * (-2.0)                  as yellow_card_pts,
-        ls.red_cards          * (-3.0)                  as red_card_pts
+        ls.red_cards          * (-3.0)                  as red_card_pts,
+        -- D-050: off_loads — all players, +1 pt each
+        ls.off_loads          * 1.0                     as off_load_pts,
+        -- D-050: missed kicks — kicker only (kicker_flag = 0 or 1)
+        ls.missed_conversion_goals * ls.kicker_flag * (-0.5) as missed_conversion_pts,
+        ls.missed_penalty_goals    * ls.kicker_flag * (-1.0) as missed_penalty_pts
 
     from lineup_stats ls
 
@@ -240,9 +253,10 @@ scored as (
             + pc.penalty_conceded_pts
             + pc.yellow_card_pts
             + pc.red_card_pts
+            + pc.off_load_pts
+            + pc.missed_conversion_pts
+            + pc.missed_penalty_pts
         )::numeric(8, 2)                                as raw_points
-
-    from point_components pc
 
 ),
 
@@ -284,7 +298,11 @@ final_scores as (
         s.handling_error_pts,
         s.penalty_conceded_pts,
         s.yellow_card_pts,
-        s.red_card_pts
+        s.red_card_pts,
+        -- D-050
+        s.off_load_pts,
+        s.missed_conversion_pts,
+        s.missed_penalty_pts
 
     from scored s
 
@@ -319,6 +337,10 @@ select
     handling_error_pts,
     penalty_conceded_pts,
     yellow_card_pts,
-    red_card_pts
+    red_card_pts,
+    -- D-050
+    off_load_pts,
+    missed_conversion_pts,
+    missed_penalty_pts
 
 from final_scores

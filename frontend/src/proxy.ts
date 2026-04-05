@@ -40,7 +40,7 @@ function isPublicRoute(pathname: string): boolean {
 // were written to a response that next-intl then discarded.
 // ---------------------------------------------------------------------------
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   // --- Step 1: Run next-intl first, get its response ---
   // We use this as the base response so locale rewrites are preserved.
   const intlResponse = intlMiddleware(request);

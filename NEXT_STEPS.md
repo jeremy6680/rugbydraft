@@ -1,7 +1,7 @@
 # NEXT_STEPS.md — RugbyDraft
 
-> Current status: Phase 3 complete — scoring system v2 finalized. Ready for Phase 4.
-> Last updated: 2026-03-23
+> Current status: Phase 4 in progress — feat/scoring-d050 complete, ready for Phase 4 PR.
+> Last updated: 2026-04-05
 
 ---
 
@@ -247,11 +247,73 @@
 **Estimated duration:** 3–4 weeks
 **Prerequisite:** Phase 3 complete.
 
-- [ ] Draft Room — full-screen mobile-first, real-time timer, player list, pick confirmation
-- [ ] Roster management page — starters / bench / IR, weekly lineup, captain + kicker designation
-- [ ] Leaderboard — live updates via Supabase Realtime
-- [ ] Stats page — all filters (status, nationality/club, position, period, multi-criteria)
-- [ ] Dashboard — all active leagues, alerts, next opponent
+- [x] Draft Room — full-screen mobile-first, real-time timer, player list, pick confirmation
+  - [x] `src/types/draft.ts` — TypeScript mirror of FastAPI schemas
+  - [x] `src/types/player.ts` — TypeScript mirror of PlayerSummary
+  - [x] `src/hooks/useDraftRealtime.ts` — Supabase Realtime + polling fallback + connect/disconnect
+  - [x] `src/components/draft/DraftTimer.tsx` — countdown with urgency colours + Framer Motion
+  - [x] `src/components/draft/DraftStatusBanner.tsx` — contextual status (your turn / waiting / autodraft / done)
+  - [x] `src/components/draft/DraftPlayerCard.tsx` — player card, available/drafted/injured states
+  - [x] `src/components/draft/DraftPlayerList.tsx` — filterable scrollable pool (search + position chips)
+  - [x] `src/components/draft/DraftOrderPanel.tsx` — snake order + pick history
+  - [x] `src/components/draft/DraftPickConfirmModal.tsx` — confirmation modal, focus trap, keyboard
+  - [x] `src/components/draft/DraftRoom.tsx` — main orchestrator, mobile-first layout
+  - [x] `src/app/[locale]/(protected)/draft/[draftId]/page.tsx` — Server Component, parallel data fetch
+  - [x] `backend/app/routers/draft.py` — added `POST /{league_id}/pick` endpoint
+  - [x] `backend/app/routers/players.py` — new `GET /players` endpoint
+  - [x] `messages/fr.json` — all draft i18n keys added
+  - [x] framer-motion installed
+- [x] Roster management page — starters / bench / IR, weekly lineup, captain + kicker designation
+  - [x] `src/types/roster.ts` — TypeScript types (RosterSlot, WeeklyLineupEntry, LineupUpdatePayload, etc.)
+  - [x] `src/hooks/useRosters.ts` — fetch + mutations + coverage computation + lock polling
+  - [x] `src/components/roster/RosterPlayerCard.tsx` — player card, lock/captain/kicker/IR states
+  - [x] `src/components/roster/RosterSlotGrid.tsx` — 15 starter slots, jersey order, position groups
+  - [x] `src/components/roster/RosterBenchGrid.tsx` — bench slots + coverage bar (CDC §6.2)
+  - [x] `src/components/roster/RosterIRPanel.tsx` — IR slots, reintegration button, blocking alert
+  - [x] `src/components/roster/RosterCaptainKickerBar.tsx` — captain/kicker designation, player picker
+  - [x] `src/components/roster/RosterManagement.tsx` — orchestrator, swap flow, mobile tabs
+  - [x] `src/app/[locale]/(protected)/league/[leagueId]/roster/page.tsx` — Server Component, current round fetch
+  - [x] `messages/fr.json` — all roster i18n keys added
+  - [x] `src/components/layout/Sidebar.tsx` — fixed hydration mismatch (localStorage + Turbopack)
+- [x] Leaderboard — live updates via Supabase Realtime
+  - [x] `src/types/leaderboard.ts` — TypeScript mirror of LeagueStandingsResponse
+  - [x] `src/hooks/useLeaderboard.ts` — fetch + Supabase Realtime Postgres Changes + polling fallback
+  - [x] `src/components/leaderboard/LeaderboardRow.tsx` — row atom, medal icons, current user highlight
+  - [x] `src/components/leaderboard/LeaderboardTable.tsx` — full table, loading/error/empty states
+  - [x] `src/app/[locale]/(protected)/league/[leagueId]/leaderboard/page.tsx` — Server Component, SSR fetch
+  - [x] `backend/app/routers/leagues.py` — GET /leagues/{league_id}/standings
+  - [x] `messages/fr.json` — all leaderboard i18n keys added
+- [x] Stats page — all filters (status, nationality/club, position, period, multi-criteria)
+  - [x] `dbt_project/models/gold/mart_player_stats_ui.sql` — gold model updated: all D-039 stats,
+        total_points + avg_points, 4 periods (1w/2w/4w/season), trend computation
+  - [x] `backend/app/routers/stats.py` — GET /stats/players (competition_id + period + league_id)
+        pool_status enrichment (mine/drafted/free), PlayerStatsRow + PlayerStatsResponse
+  - [x] `backend/app/main.py` — stats_router registered
+  - [x] `src/types/stats.ts` — PlayerStatsRow, PlayerStatsResponse, StatsFilters,
+        StatsPeriod, PoolStatus, StatsTrend, StatsColumnGroup
+  - [x] `src/hooks/usePlayerStats.ts` — fetch + mock data + client-side filtering (D-044, D-045)
+  - [x] `src/components/stats/StatsFiltersBar.tsx` — period tabs, search, position chips,
+        pool status chips, club/nationality select, clear all
+  - [x] `src/components/stats/StatsTable.tsx` — 4 column groups (points/attack/defence/discipline),
+        sortable headers, sticky identity column, trend icons, Framer Motion rows
+  - [x] `src/components/stats/StatsPageClient.tsx` — Client Component shell
+  - [x] `src/app/[locale]/(protected)/stats/page.tsx` — Server Component page
+  - [x] `messages/fr.json` — all stats i18n keys added
+  - [ ] TODO: set USE_MOCK = false in usePlayerStats.ts once DSG pipeline populates DB
+  - [ ] TODO: resolve competition_id from user's active league in stats/page.tsx (currently hardcoded mock UUID)
+  - [ ] TODO: add prev_season period to mart_player_stats_ui (deferred — see D-044)
+- [x] Dashboard page — multi-league hub, empty state, single-league auto-redirect (D-047)
+  - [x] `backend/app/routers/dashboard.py` — GET /dashboard (BFF aggregator)
+  - [x] `frontend/src/types/dashboard.ts` — TypeScript mirror
+  - [x] `frontend/src/components/dashboard/DashboardEmptyState.tsx`
+  - [x] `frontend/src/components/dashboard/DashboardAlertBadge.tsx`
+  - [x] `frontend/src/components/dashboard/DashboardLeagueCard.tsx`
+  - [x] `frontend/src/app/[locale]/(protected)/dashboard/page.tsx`
+  - [x] `messages/fr.json` — all dashboard i18n keys added
+  - [x] `backend/.env` — SUPABASE_ANON_KEY populated (was placeholder)
+  - [x] TODO: league card → tested with real league data (seed 002_test_league.sql)
+  - [ ] TODO: next_opponent field (deferred — requires schedule query)
+- [x] Swagger UI — Bearer auth scheme (`custom_openapi` in `main.py`, public paths excluded)
 - [ ] Season archive page — past results per league
 - [ ] Deploy to Hetzner via Coolify: `rugbydraft.app` live with HTTPS
 - [ ] Full axe-core accessibility audit — WCAG 2.1 AA
@@ -319,13 +381,27 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 
 ## Immediate next actions
 
-**→ Phase 1 remaining:** ~~implement `connectors/dsg.py` (see KB-008)~~ ✅ Done
+**→ Phase 4 in progress:** Draft Room ✅ Roster ✅ Leaderboard ✅ Stats page ✅ Dashboard ✅ Swagger UI ✅ feat/scoring-d050 ✅ — next: Phase 4 PR
 
-- `connectors/dsg.py` — DSGConnector, XML parser, 3-pass strategy
-  (try_counts + card_map + player_stats iteration)
-- `connectors/tests/test_dsg_connector.py` — 33 tests passing
-- KB-008 resolved
+**→ Next session (priority 1):** open Phase 4 PR — merge `phase/4-frontend` into `main`.
 
 **→ Phase 1 remaining:** Cron Coolify config (after first deploy to Hetzner)
 
-**→ Phase 4:** all deferred integration tests (KB-004, KB-006, KB-007)
+**→ Phase 4 deferred:** all integration tests (KB-004, KB-006, KB-007)
+
+**→ Phase 4 deferred:** USE_MOCK = false in usePlayerStats + real competition_id in
+stats page (after first DSG pipeline run)
+
+**→ TODO (Phase 4 follow-up):** expose `draft_order` in `DraftStateSnapshotResponse`
+so `DraftOrderPanel` can show the full upcoming snake order (not just current slot).
+
+**→ TODO (future):** add `prev_season` period to `mart_player_stats_ui` — requires
+`previous_competition_id` on the `competitions` table.
+
+**→ TODO (V2):** evaluate `defenders_beaten`, `drop_goals_converted`,
+`drop_goal_missed` for scoring inclusion (DSG fields confirmed present — deferred
+pending game-design validation, see D-050).
+
+**→ Business:** DSG billing is annual upfront (1 500 € / 12 months).
+Launch Ulule campaign to validate project before signing. Break-even ~100 paying
+subscribers (see D-037).

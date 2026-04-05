@@ -1437,3 +1437,435 @@ Conditional stats (COALESCE to 0 if absent from API response):
 - `CONTEXT.md` (scoring summary section)
 - `docs/dsg_api_reference.md` (section 6 — field mapping)
 - `docs/cdc_v31.md` (section 6 — scoring rules)
+
+---
+
+## D-040 — Draft Room: currentUserId passed as prop from Server Component
+
+**Date:** 2026-03-24
+**Status:** Accepted
+
+**Context:** The Draft Room (`DraftRoom.tsx`) is a Client Component that needs
+the authenticated user's UUID to compute `isMyTurn` and `isAutodraftActive`.
+Three options were considered.
+
+**Options considered:**
+
+- A) Pass `currentUserId` as prop from the Server Component page (`page.tsx`).
+- B) Hook `useUser()` calling `supabase.auth.getUser()` client-side on mount.
+- C) React Context Provider (`AuthProvider`) wrapping the protected layout.
+
+**Decision:** Option A — prop from Server Component.
+
+**Rationale:**
+
+- The page Server Component already calls `supabase.auth.getUser()` for the
+  session check. Passing `user.id` as a prop costs zero extra requests.
+- Option B would trigger an extra client-side network call on every Draft Room
+  mount — unnecessary latency in a latency-sensitive UI.
+- Option C is overkill for V1 — only one Client Component currently needs the
+  user ID. Can migrate to Context if more components require it.
+
+**Consequences:**
+
+- `user.id` is visible in React DevTools props — acceptable (UUID is not secret).
+- If other Client Components need the user ID, add a Context Provider at that point.
+
+---
+
+## D-041 — POST /draft/{league_id}/pick endpoint added in Phase 4
+
+**Date:** 2026-03-24
+**Status:** Accepted
+
+**Context:** The `DraftEngine.submit_pick()` method existed since Phase 2 but
+had no HTTP endpoint. The Draft Room frontend required this endpoint to submit
+manual picks.
+
+**Decision:** Added `POST /draft/{league_id}/pick` to `backend/app/routers/draft.py`.
+
+**Error mapping:**
+
+- `NotYourTurnError` → HTTP 409 Conflict
+- `PlayerAlreadyDraftedError` → HTTP 409 Conflict
+- `PickValidationError` → HTTP 422 Unprocessable Entity
+
+**Consequences:**
+
+- The endpoint returns the full updated `DraftStateSnapshotResponse` — the client
+  gets the new state immediately without waiting for the Realtime broadcast.
+  (Belt-and-suspenders: Realtime also broadcasts, but the HTTP response is faster.)
+
+---
+
+## D-042 — Roster page: single atomic POST for all lineup changes
+
+**Date:** 2026-03-24
+**Status:** Accepted
+
+**Context:** The roster management page allows multiple simultaneous changes
+in one editing session: captain designation, kicker designation, position
+overrides for multi-position players, and starter ↔ bench swaps. The question
+was whether to use one endpoint per action type or a single consolidated POST.
+
+**Options considered:**
+
+- A) One endpoint per action: `PATCH /lineup/captain`, `PATCH /lineup/kicker`,
+  `POST /lineup/swap`, `PATCH /lineup/position`
+- B) Single atomic POST: `POST /lineup/{leagueId}/update` with a
+  `LineupUpdatePayload` containing all change types in one request.
+
+**Decision:** Option B — single atomic POST.
+
+**Rationale:**
+
+- Prevents race conditions if the user makes rapid successive changes
+  (e.g. captain change + position override within the same render cycle).
+- The backend validates the entire payload before committing any change —
+  partial failure is impossible.
+- Simpler frontend state: one `isSaving` flag, one optimistic update,
+  one rollback path.
+- Fewer HTTP round trips.
+
+**Consequences:**
+
+- `LineupUpdatePayload` carries all change types. Fields not being changed
+  are sent as null / empty arrays — the backend ignores them.
+- The backend `POST /lineup/{leagueId}/update` must validate each field
+  independently and return the full confirmed `WeeklyLineupResponse`.
+
+---
+
+## D-043 — Sidebar hydration: useEffect init pattern replacing lazy useState
+
+**Date:** 2026-03-24
+**Status:** Accepted
+
+**Context:** `Sidebar.tsx` persists collapsed state in localStorage. The
+original implementation used a lazy `useState` initializer that called
+`localStorage` directly — this caused a hydration mismatch under
+Next.js 15 / Turbopack because the lazy initializer runs during SSR
+where `localStorage` is undefined.
+
+**Decision:** Replace lazy initializer with `useState<boolean | null>(null)`
+
+- `useEffect` that reads localStorage once after mount. `null` means
+  "not yet mounted" — renders a same-width placeholder div instead of the
+  real sidebar until localStorage is read.
+
+**Rationale:**
+
+- `useEffect` is guaranteed to run only on the client, never during SSR.
+- The placeholder div has the same width as the default expanded sidebar
+  (`w-60`) — no layout shift on first paint.
+- `isCollapsed === null` replaces a separate `mounted` boolean flag —
+  one piece of state instead of two.
+
+**Consequences:**
+
+- Any component that reads browser-only APIs (localStorage, sessionStorage,
+  window) must follow this same pattern: `useState(null)` + `useEffect` init.
+- The sidebar flashes its placeholder for one frame on cold load if the
+  user had it collapsed — imperceptible in practice.
+
+---
+
+---
+
+## D-044 — Stats page: period is server-side, all other filters are client-side
+
+**Date:** 2026-03-29
+**Status:** Accepted
+
+**Context:** The Stats page (CDC §12) requires multiple filters: period
+(1w/2w/4w/season), position, club/nationality, pool status (all/free/mine),
+and a player name search. Two approaches were considered for applying these
+filters.
+
+**Options considered:**
+
+- A) All filters server-side — one API call per filter change, including
+  position/club/search. Minimal client memory, but high request frequency
+  and perceived latency on fast filter interactions.
+- B) Period server-side only — one API call per period change. Position,
+  club, search, pool status filtered client-side in memory.
+
+**Decision:** Option B — period is the only server-side parameter.
+
+**Rationale:**
+
+- Period is the only filter that changes the data volume: switching from
+  `season` to `1w` returns a structurally different aggregation. It must
+  go to the server.
+- Position, club, search, and pool status are pure projections of the
+  full dataset. With ~200–500 players per competition, client-side
+  filtering is instantaneous — no perceptible latency.
+- Fewer HTTP requests = faster perceived UX for filter interactions.
+- `mart_player_stats_ui` is pre-aggregated per period — one query returns
+  all players for that period. No benefit to pushing position/club filters
+  to the DB.
+
+**Consequences:**
+
+- `GET /stats/players` accepts `competition_id` + `period` + optional
+  `league_id` (for `pool_status` enrichment). No position/club params.
+- `usePlayerStats` hook holds the full player list in memory and
+  derives `filteredPlayers` via `useMemo` on every filter state change.
+- `availablePositions` and `availableClubs` are derived from the full
+  dataset — no separate endpoint needed.
+
+---
+
+## D-045 — Stats page: mock data flag in usePlayerStats for Phase 4 dev
+
+**Date:** 2026-03-29
+**Status:** Accepted (temporary — remove when pipeline populates DB)
+
+**Context:** `mart_player_stats_ui` is empty during Phase 4 development
+(no DSG data has been ingested yet). The Stats page frontend must be
+buildable and testable without a live database.
+
+**Decision:** `USE_MOCK = true` flag in `usePlayerStats.ts`. When true,
+the hook returns a hardcoded `MOCK_PLAYERS` array instead of calling the
+API. The mock covers all position types, all `pool_status` values, all
+`availability_status` values, and both `trend` directions.
+
+**Removal criteria:** Set `USE_MOCK = false` once `dbt run --target prod
+--select mart_player_stats_ui` completes successfully with real DSG data.
+
+**Consequences:**
+
+- No backend or DB required to develop/test the Stats page UI.
+- The mock flag is clearly documented with a `// TODO: remove` comment.
+- All 6 mock players use `competition_id: "00000000-0000-0000-0000-000000000099"`
+  — trivially distinguishable from real UUIDs.
+
+---
+
+## D-046 — JWT middleware: JWKS/ES256 replacing HS256 for Supabase auth
+
+**Date:** 2026-03-30
+**Status:** Accepted
+**Supersedes:** nothing — extends the existing auth middleware (KB-009 fix)
+
+**Context:** Supabase changed the default JWT signing algorithm to ES256 (ECDSA
+P-256) for projects created after mid-2024. The original middleware hardcoded
+HS256 (symmetric HMAC), causing all authenticated endpoints to return 401.
+ES256 is an asymmetric algorithm: Supabase signs with a private key; consumers
+verify with the public key exposed at a standard JWKS endpoint.
+
+**Options considered:**
+
+- A) Switch entirely to ES256, remove HS256 support.
+- B) Auto-detect algorithm from the JWT header (`alg` claim).
+- C) Support both via an explicit env var (`SUPABASE_JWT_ALGORITHM`), defaulting to ES256.
+
+**Decision:** Option C — explicit env var, default ES256.
+
+**Rationale:**
+
+- Option A breaks local Supabase (`supabase start`) which still uses HS256.
+- Option B reads the `alg` claim from the untrusted token header before
+  verification — this is an algorithm confusion attack vector. Never trust
+  the token's own `alg` claim to select the verification algorithm.
+- Option C is explicit, auditable, and safe. The algorithm is configured
+  server-side, never derived from the incoming token.
+
+**Implementation:**
+
+- `app/config.py`: `supabase_jwt_algorithm` field added (default: `"ES256"`).
+- `app/middleware/auth.py`: `_verify_token_es256()` (async, JWKS cache + retry
+  on key rotation) and `_verify_token_hs256()` (sync, symmetric secret).
+  `AuthMiddleware.dispatch()` branches on `settings.supabase_jwt_algorithm`.
+- JWKS key is cached in `_jwks_cache` module-level variable. Cache is
+  invalidated and refreshed on `JWKError` / `JWTError` (key rotation).
+  `ExpiredSignatureError` is not retried — expiry is definitive.
+- `backend/tests/test_auth.py`: 8 tests covering both paths.
+
+**Consequences:**
+
+- `.env` must set `SUPABASE_JWT_ALGORITHM=ES256` (production) or `HS256`
+  (local Supabase with `supabase start`).
+- The JWKS endpoint must be reachable from FastAPI at startup. If unreachable,
+  the first authenticated request returns 401 (no crash, no retry loop).
+- `supabase_jwt_secret` is kept in `Settings` for HS256 fallback and reference,
+  but is no longer used in ES256 mode.
+
+---
+
+## D-047 — Dashboard: server-side redirect when user has exactly one active league
+
+**Date:** 2026-04-02
+**Status:** Accepted
+
+**Context:** The Dashboard page (CDC §5.2) shows all active leagues for the user.
+When a user has exactly one league, showing the dashboard is redundant — they
+would immediately navigate to that league anyway.
+
+**Decision:** If `GET /dashboard` returns exactly one league, the Server Component
+performs a server-side `redirect()` to `/[locale]/league/[leagueId]/leaderboard`.
+Zero client flash. The user can always navigate back to `/dashboard` via the sidebar.
+
+**Consequences:**
+
+- Users with one league never see the dashboard grid — they land directly in their league.
+- If the user later joins a second league, the redirect stops and the grid is shown.
+- The redirect is locale-aware (`getLocale()` from next-intl/server).
+
+---
+
+## D-048 — Supabase PostgREST: joined table column filters must be applied in Python
+
+**Date:** 2026-04-02
+**Status:** Accepted
+
+**Context:** The dashboard endpoint needed to exclude archived leagues. The initial
+implementation used `.neq("leagues.status", "archived")` on the PostgREST query
+builder, which resulted in `column leagues_1.status does not exist` (HTTP 400).
+
+**Finding:** The Supabase Python SDK does not support filtering on columns of
+embedded/joined tables via the standard `.neq()` / `.eq()` methods. PostgREST
+interprets `leagues.status` as a direct column alias on the join result, not as
+a filter on the nested table. This applies to all relational filters on joined tables.
+
+**Decision:** Fetch the full result set and filter joined-table columns in Python
+after `.execute()`. This is a PostgREST SDK limitation, not a bug.
+
+**Rule for all future routers:** Never use `.eq()` / `.neq()` / `.filter()` on
+dotted column paths (e.g. `"table.column"`) — apply those filters in Python.
+
+**Consequences:**
+
+- All dashboard helpers fetch slightly more data than strictly needed (no joined-column WHERE clause).
+- Filtering in Python is negligible for the expected data volumes (< 50 leagues per user).
+- This pattern is documented here to prevent the same mistake in future endpoints.
+
+---
+
+## D-049 — leagues table uses is_archived boolean, not a status enum
+
+**Date:** 2026-04-02
+**Status:** Accepted
+
+**Context:** The dashboard router originally used `leagues.status` in both the
+select and filter, assuming the leagues table had a status column (like competitions).
+The query failed because leagues uses `is_archived BOOLEAN` instead.
+
+**Finding:** The schema (001_initial_schema.sql) defines leagues with:
+
+- `is_archived BOOLEAN NOT NULL DEFAULT FALSE`
+  No `status` column exists. The `league_status` field in the API response is
+  derived at runtime from draft state, not stored in the DB.
+
+**Decision:** `league_status` in `DashboardLeague` is computed as follows:
+
+- draft active → "drafting"
+- draft pending → "upcoming"
+- no draft (or completed) → "active"
+- is_archived = true → excluded from dashboard (filtered in Python)
+
+**Consequences:**
+
+- `DashboardLeague.league_status` is always derived, never read from DB.
+- The select must use `is_archived` not `status`.
+- Future routers touching leagues must be aware of this schema design.
+
+---
+
+## D-050 — Scoring system: off_loads, missed_conversion_goals, missed_penalty_goals activated (supersedes D-039 partially)
+
+**Date:** 2026-04-02
+**Status:** Accepted
+**Partially supersedes:** D-039 (three rules reinstated; the rest of D-039 remains valid)
+
+**Context:** D-039 removed offloads (+1), conversion missed (-0.5), and penalty
+missed (-1) from the scoring system because the corresponding DSG XML fields were
+absent from the player_stats node at the time of validation (match 3798425,
+2026-03-23). On 2026-04-02, DSG confirmed activation of additional stats fields
+on the trial feed following a request to Rajesh D'Souza (VP Sales & Partnerships).
+Re-validation on match 3798425 confirmed all six new fields are present as XML
+attributes on every `<people>` element.
+
+**New fields confirmed present in DSG XML (2026-04-02 re-validation):**
+
+| DSG XML attribute         | Non-empty values observed            |
+| ------------------------- | ------------------------------------ |
+| `off_loads`               | ✅ Yes — e.g. Sowakula 3, T. Ramos 3 |
+| `defenders_beaten`        | ✅ Yes — e.g. T. Ramos 6, Jauneau 4  |
+| `missed_conversion_goals` | ✅ Yes — e.g. H. Plummer 1           |
+| `missed_penalty_goals`    | ✅ Present, empty on this match      |
+| `drop_goals_converted`    | ✅ Present, empty on this match      |
+| `drop_goal_missed`        | ✅ Present, empty on this match      |
+
+**Important bug discovered:** The DSG XML attribute is `off_loads` (with underscore),
+not `offloads`. The connector (`connectors/dsg.py`) was looking for `offloads` —
+a silent zero-read. Fixed in this decision's implementation.
+
+**Decision — fields integrated into scoring (D-050):**
+
+| Action            | Points | DSG field                 | Applies to  |
+| ----------------- | ------ | ------------------------- | ----------- |
+| Offload           | +1     | `off_loads`               | All         |
+| Conversion missed | -0.5   | `missed_conversion_goals` | Kicker only |
+| Penalty missed    | -1.0   | `missed_penalty_goals`    | Kicker only |
+
+**Decision — fields deferred to V2:**
+
+- `defenders_beaten` — not in CDC scoring; game-design impact unvalidated.
+- `drop_goals_converted` / `drop_goal_missed` — drops are rare in Top 14;
+  marginal scoring impact. Revisit if frequency data justifies inclusion.
+
+**Rationale:**
+
+- `off_loads` was in the original CDC scoring and removed only due to data absence.
+  Reinstating it restores the intended system.
+- `missed_conversion_goals` and `missed_penalty_goals` were also removed in D-039
+  for the same reason. Now available directly — no computation needed.
+- Missed kicks apply kicker-only (multiplied by `kicker_flag` in dbt) for the
+  same reason as made kicks: a non-designated player who boots a one-off kick
+  should not be penalised in fantasy.
+- `defenders_beaten` and drop goal fields are deferred to avoid unvalidated
+  game-design changes mid-development.
+
+**Updated scoring table (full — D-039 + D-050):**
+
+| Action                | Points | DSG field                  | Applies to            |
+| --------------------- | ------ | -------------------------- | --------------------- |
+| Metre carried (per m) | +0.1   | `carries_metres`           | All                   |
+| Try scored            | +5     | scores (event type="try")  | All                   |
+| Try assist            | +2     | `try_assists`              | All                   |
+| Turnover won          | +2     | `turnover_won`             | All                   |
+| Line break            | +1     | `line_breaks`              | All                   |
+| Kick assist           | +1     | `try_kicks`                | All                   |
+| Offload               | +1     | `off_loads`                | All                   |
+| Catch from kick       | +0.5   | `catch_from_kick`          | All                   |
+| Tackle                | +0.5   | `tackles`                  | All                   |
+| Lineout won           | +1     | `lineouts_won`             | Thrower (all)         |
+| Lineout lost          | -0.5   | `lineouts_lost`            | Thrower (all)         |
+| Turnovers conceded    | -0.5   | `turnovers_conceded`       | All                   |
+| Missed tackle         | -0.5   | `missed_tackles`           | All                   |
+| Handling error        | -0.5   | `handling_error`           | All                   |
+| Penalty conceded      | -1     | `penalties_conceded`       | All                   |
+| Yellow card           | -2     | bookings (yellow_card)     | All                   |
+| Red card              | -3     | bookings (red_card)        | All                   |
+| Conversion made       | +2     | `conversion_goals`         | Kicker only           |
+| Penalty kick made     | +3     | `goals - conversion_goals` | Kicker only           |
+| Conversion missed     | -0.5   | `missed_conversion_goals`  | Kicker only           |
+| Penalty missed        | -1.0   | `missed_penalty_goals`     | Kicker only           |
+| Captain multiplier    | ×1.5   | —                          | Captain (nearest 0.5) |
+
+**Conditional stats (COALESCE to 0 if absent from API response):**
+`line_breaks`, `catch_from_kick`, `lineouts_won`, `lineouts_lost`,
+`try_kicks`, `handling_error`, `turnovers_conceded`, `off_loads`,
+`missed_conversion_goals`, `missed_penalty_goals`
+
+**Files to update (feat/scoring-d050 branch):**
+
+- `connectors/base.py` — `PlayerMatchStats`: add `offloads`, `missed_conversions`,
+  `missed_penalties` fields
+- `connectors/dsg.py` — `_parse_one_player()`: fix `off_loads` attribute name,
+  add `missed_conversion_goals`, `missed_penalty_goals`
+- `dbt_project/models/gold/mart_fantasy_points.sql` — add 3 stats through all CTEs,
+  add `offload_pts`, `missed_conversion_pts`, `missed_penalty_pts` to breakdown
+- `dbt_project/models/gold/mart_player_stats_ui.sql` — add `offloads` to display stats
+- `CONTEXT.md` — update scoring summary section

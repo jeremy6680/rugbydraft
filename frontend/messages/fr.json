@@ -56,12 +56,27 @@
     "title": "Tableau de bord",
     "myLeagues": "Mes ligues",
     "noLeagues": "Vous n'avez pas encore de ligue.",
+    "noLeaguesHint": "Rejoignez une ligue existante avec un code d'invitation, ou créez la vôtre.",
     "createLeague": "Créer une ligue",
     "joinLeague": "Rejoindre une ligue",
     "nextDraft": "Prochain draft",
     "nextMatch": "Prochain match",
     "currentRound": "Journée {round}",
-    "alerts": "Alertes"
+    "points": "pts",
+    "rank": "Rang",
+    "goToLeague": "Voir la ligue",
+    "commissioner": "Commissaire",
+    "commissionerBadge": "Vous êtes commissaire de cette ligue",
+    "draftInProgress": "Draft en cours — rejoindre",
+    "draftUpcoming": "Draft à venir — se préparer",
+    "alertsLabel": "Alertes de la ligue",
+    "alerts": {
+      "player_injured": "{name} est blessé(e)",
+      "player_recovered": "{name} est guéri(e) — à réintégrer",
+      "waiver_open": "Fenêtre waiver ouverte",
+      "trade_proposed": "Trade en attente",
+      "ai_report_ready": "Rapport IA disponible"
+    }
   },
   "draft": {
     "title": "Salle de draft",
@@ -70,6 +85,8 @@
     "waitingFor": "En attente de {manager}…",
     "timeRemaining": "{seconds}s",
     "pickConfirm": "Sélectionner {player} ?",
+    "pickConfirmTitle": "Confirmer la sélection",
+    "pickSubmitting": "Envoi en cours…",
     "autodraftActive": "Autodraft activé",
     "draftComplete": "Draft terminé !",
     "searchPlayer": "Rechercher un joueur…",
@@ -78,6 +95,19 @@
     "filterClub": "Club",
     "available": "Disponible",
     "picked": "Drafté",
+    "injured": "Blessé",
+    "suspended": "Suspendu",
+    "unknownManager": "Manager inconnu",
+    "unknownPlayer": "Joueur inconnu",
+    "upcomingOrder": "Prochain ordre",
+    "pickHistory": "Historique",
+    "noPicksYet": "Aucun pick effectué",
+    "enteredByCommissioner": "saisi par commissaire",
+    "connecting": "Connexion au draft…",
+    "viewOrder": "Voir l'ordre",
+    "errorSessionExpired": "Session expirée. Veuillez vous reconnecter.",
+    "errorPickFailed": "Impossible d'envoyer le pick. Réessayez.",
+    "retry": "Réessayer",
     "positions": {
       "prop": "Pilier",
       "hooker": "Talonneur",
@@ -92,41 +122,169 @@
     }
   },
   "roster": {
-    "title": "Mon équipe",
-    "starters": "Titulaires",
-    "bench": "Remplaçants",
-    "infirmary": "Infirmerie",
-    "captain": "Capitaine",
-    "kicker": "Buteur",
-    "setCaptain": "Désigner capitaine",
-    "setKicker": "Désigner buteur",
-    "moveToStarter": "Mettre titulaire",
-    "moveToBench": "Mettre sur le banc",
-    "moveToIR": "Mettre à l'infirmerie",
+    "pageTitle": "Mon équipe",
+    "noActiveRound": "Aucune journée en cours. La compétition n'a pas encore démarré.",
+
+    "tabs": {
+      "label": "Navigation du roster",
+      "starters": "Titulaires",
+      "bench": "Remplaçants",
+      "ir": "Infirmerie"
+    },
+
+    "starters": {
+      "title": "Titulaires"
+    },
+
+    "bench": {
+      "title": "Remplaçants"
+    },
+
+    "slot": {
+      "empty": "Slot #{number} vide",
+      "vacant": "Vacant"
+    },
+
+    "availability": {
+      "available": "Disponible",
+      "injured": "Blessé",
+      "suspended": "Suspendu",
+      "doubtful": "Incertain"
+    },
+
     "locked": "Verrouillé",
-    "lockedAt": "Verrouillé au coup d'envoi"
+    "current": "Sélectionné",
+
+    "coverage": {
+      "title": "Couverture banc",
+      "ok": "Couverture complète",
+      "uncovered": "{count} poste(s) découvert(s)",
+      "detail": "Détail de la couverture par poste"
+    },
+
+    "ir": {
+      "title": "Infirmerie",
+      "empty": "Slot infirmerie vide",
+      "slot": "Slot infirmerie #{number}",
+      "recovered": "Guéri — à réintégrer",
+      "blockingAlert": "Un joueur guéri attend sa réintégration. Les waivers et trades sont bloqués jusqu'à cette action.",
+      "rulesNote": "Les joueurs en infirmerie ne marquent aucun point. Vous avez {deadline} jours pour réintégrer un joueur guéri.",
+      "reintegrate": {
+        "label": "Réintégrer {name}",
+        "action": "Réintégrer"
+      }
+    },
+
+    "captain": {
+      "label": "Capitaine",
+      "description": "Multiplie les points par ×1,5",
+      "pickerTitle": "Choisir le capitaine"
+    },
+
+    "kicker": {
+      "label": "Botteur",
+      "description": "Marque sur pénalités et transformations",
+      "pickerTitle": "Choisir le botteur"
+    },
+
+    "captainKicker": {
+      "title": "Capitaine & Botteur"
+    },
+
+    "designation": {
+      "none": "Non désigné",
+      "locked": "Verrouillé — match commencé",
+      "change": "Changer"
+    },
+
+    "multiPosition": {
+      "label": "Choisir le poste pour cette journée"
+    }
   },
   "leaderboard": {
-    "title": "Classement",
-    "rank": "Rang",
-    "manager": "Manager",
-    "points": "Points",
-    "roundPoints": "J{round}",
-    "total": "Total"
+    "page_title": "Classement",
+    "loading": "Chargement du classement…",
+    "refreshing": "Mise à jour…",
+    "error_title": "Impossible de charger le classement.",
+    "error_retry": "Vérifie ta connexion et réessaie.",
+    "empty_state": "Le classement sera disponible dès le début de la compétition.",
+    "table_aria_label": "Classement de la ligue",
+    "col_rank": "Rang",
+    "col_manager": "Manager",
+    "col_record": "V / D",
+    "col_points": "Points",
+    "you_badge": "Toi",
+    "you_badge_label": "C'est toi",
+    "points_unit": "pts",
+    "last_updated": "Mis à jour {time}"
   },
   "stats": {
-    "title": "Statistiques",
-    "player": "Joueur",
-    "position": "Poste",
-    "club": "Club",
-    "nationality": "Nationalité",
-    "totalPoints": "Points total",
-    "avgPoints": "Moy. points",
-    "tries": "Essais",
-    "tackles": "Plaquages",
-    "metres": "Mètres",
-    "turnovers": "Turnovers",
-    "noStats": "Aucune statistique disponible"
+    "title": "Statistiques joueurs",
+
+    "periodLabel": "Période",
+    "period1w": "1 sem.",
+    "period2w": "2 sem.",
+    "period4w": "4 sem.",
+    "periodSeason": "Saison",
+
+    "searchPlaceholder": "Rechercher un joueur…",
+    "filterClubNationality": "Club / Nationalité",
+    "filterPosition": "Filtrer par poste",
+    "filterPoolLabel": "Disponibilité",
+    "filterAll": "Tous",
+    "filterFree": "Libres",
+    "filterMine": "Mon équipe",
+    "clearFilters": "Réinitialiser",
+    "allPositions": "Tous les postes",
+
+    "groupPoints": "Points",
+    "groupAttack": "Attaque",
+    "groupDefence": "Défense",
+    "groupDiscipline": "Discipline",
+    "columnGroupLabel": "Groupes de colonnes",
+
+    "colPlayer": "Joueur",
+    "colTrend": "Tendance",
+    "colAvgPoints": "Moy.",
+    "colTotalPoints": "Total",
+    "colRoundsPlayed": "J. joués",
+    "colTries": "Essais",
+    "colTryAssists": "Passes déc.",
+    "colMetres": "Mètres",
+    "colKickAssists": "Assist. pied",
+    "colLineBreaks": "Cassures",
+    "colCatchFromKick": "Récept. coup de pied",
+    "colConversions": "Transf.",
+    "colPenalties": "Pénal.",
+    "colTackles": "Plaquages",
+    "colTurnoversWon": "Turnovers gagnés",
+    "colLineoutsWon": "Touches gagnées",
+    "colLineoutsLost": "Touches perdues",
+    "colTurnoversConceded": "Turnovers concédés",
+    "colMissedTackles": "Plaquages manqués",
+    "colHandlingErrors": "Erreurs ballon",
+    "colPenaltiesConceded": "Pénalités concédées",
+    "colYellowCards": "Cartons jaunes",
+    "colRedCards": "Cartons rouges",
+
+    "poolStatus": {
+      "mine": "Mon équipe",
+      "drafted": "Drafté",
+      "free": "Libre"
+    },
+
+    "availability": {
+      "available": "Disponible",
+      "injured": "Blessé",
+      "suspended": "Suspendu",
+      "doubtful": "Incertain"
+    },
+
+    "tableAriaLabel": "Statistiques des joueurs",
+    "rowCount": "{count} joueur(s)",
+    "loading": "Chargement des statistiques…",
+    "errorTitle": "Impossible de charger les statistiques.",
+    "noStats": "Aucune statistique disponible pour cette période."
   },
   "league": {
     "title": "Ma ligue",

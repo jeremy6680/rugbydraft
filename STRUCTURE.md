@@ -2,7 +2,7 @@
 
 > Repository structure explained.
 > Updated at each phase — reflects the current state of the codebase.
-> Last updated: 2026-03-23 (feat/scoring-v2-dsg — scoring system v2, DSG field mapping)
+> Last updated: 2026-04-02 (feat/dashboard — GET /dashboard, dashboard page, D-047/D-048/D-049)
 
 ---
 
@@ -58,12 +58,18 @@ backend/
 │   │                      # via pydantic-settings. Never hardcode secrets.
 │   ├── middleware/
 │   │   ├── __init__.py
-│   │   └── auth.py        # JWT verification middleware (Supabase Auth tokens)
-│   │                      # Global opt-out model — all routes protected by default
-│   │                      # Public routes whitelisted in PUBLIC_PATHS
+│   │   └── auth.py     # JWT verification middleware (Supabase Auth tokens)
+│   │                   # ES256 (default): JWKS public key, in-memory cache,
+│   │                   # single retry on key rotation. HS256: opt-in via
+│   │                   # SUPABASE_JWT_ALGORITHM=HS256 (local Supabase / older projects).
+│   │                   # Global opt-out model — all routes protected by default.
+│   │                   # Public routes whitelisted in PUBLIC_PATHS.
 │   ├── routers/
 │   │   ├── __init__.py
 │   │   ├── health.py          # GET /health — liveness probe (public, no JWT)
+│   │   ├── leagues.py         # GET /leagues/{league_id}/standings
+│   │   │                      # StandingEntry, LeagueStandingsResponse
+│   │   │                      # Membership guard + JOIN users for display_name
 │   │   ├── lineup.py          # 4 endpoints: GET/PUT lineup, PATCH captain/kicker
 │   │   ├── trades.py          # 8 endpoints: POST /trades, GET /trades/{id},
 │   │   │                      # GET /leagues/{league_id}/trades,
@@ -72,6 +78,14 @@ backend/
 │   │   │                      # POST /complete-expired (cron internal)
 │   │   ├── infirmary.py       # 3 endpoints: PUT /ir/place, PUT /ir/reintegrate,
 │   │   │                      # GET /ir/alerts — IR slot management (CDC §6.4)
+│   │   ├── stats.py           # GET /stats/players — aggregated player stats
+│   │   │                      # Params: competition_id, period, league_id (optional)
+│   │   │                      # Pool status enrichment: mine/drafted/free
+│   │   │                      # Source: mart_player_stats_ui (gold dbt table)
+│   │   ├── dashboard.py       # GET /dashboard — BFF aggregator: all active leagues
+│   │   │                      # with rank, last round score, alerts (injuries/waivers/trades)
+│   │   │                      # leagues.is_archived filter applied in Python (D-048, D-049)
+│   │   ├── players.py         # GET /players
 │   │   ├── waivers.py         # 4 endpoints: POST/GET claims, DELETE cancel, POST process
 │   │   ├── draft.py           # POST /connect, POST /disconnect, GET /state
 │   │   └── draft_assisted.py  # POST /assisted/enable, POST /assisted/pick
@@ -173,6 +187,10 @@ backend/
 │   ├── test_fantasy_points.py  # 39 tests — scoring system v2 (D-039): attack, defence,
 │   │                           # captain multiplier, kicker-only, full player profiles
 │   ├── test_health.py       # 8 tests — health endpoint + auth middleware
+│   ├── test_auth.py         # 8 tests — ES256 JWKS verification (valid/wrong-sig/expired/
+│   │                        # JWKS-failure/key-rotation) + HS256 (valid/wrong-secret/expired)
+│   ├── conftest.py          # Loads backend/.env before collection regardless of cwd
+│   │                        # Fixes KB-003: Settings() crash when pytest run from repo root
 │   ├── test_lineup.py       # 14 tests: Pydantic, lock, IR, multi-position, captain/kicker CDC 6.6
 │   ├── test_reconnection.py # 4 tests — reconnection protocol (D-025)
 │   │                        # reconnect during own turn, after timer expired,
@@ -204,8 +222,11 @@ backend/
 
 ### Key architectural notes
 
-- `config.py` uses `pydantic-settings` — missing required env vars cause
-  immediate startup failure with a clear error message.
+- `config.py` uses `pydantic-settings` (`extra="ignore"`) — missing required
+  env vars cause immediate startup failure. Unknown vars (e.g. dbt/pipeline
+  vars from the root `.env`) are silently ignored.
+- `middleware/auth.py` — ES256 by default (JWKS), HS256 opt-in via
+  `SUPABASE_JWT_ALGORITHM=HS256`. See DECISIONS.md D-046.
 - `middleware/auth.py` is global opt-out — every route is protected unless
   explicitly added to `PUBLIC_PATHS`.
 - `routers/health.py` returns HTTP 200 always — `status: degraded` when DB
@@ -303,7 +324,9 @@ dbt_project/
 │       ├── mart_roster_scores.sql      # Aggregate points per roster per round
 │       ├── mart_leaderboard.sql        # League standings with DENSE_RANK + tiebreakers
 │       ├── mart_player_pool.sql        # Player availability per league (free/drafted/injured)
-│       └── mart_player_value.sql       # Default value score for autodraft + ghost team
+│       ├── mart_player_value.sql       # Default value score for autodraft + ghost team
+│       └── mart_player_stats_ui.sql   # Stats per player per period (1w/2w/4w/season)
+│                                      # Powers the Stats page — avg_points, trend, all scoring stats
 ├── tests/                              # dbt schema tests (not_null, unique, accepted_values)
 ├── models/schema.yml                   # Test definitions for bronze and silver layers
 ├── dbt_project.yml                     # dbt project configuration
@@ -386,25 +409,109 @@ frontend/
 │   │       ├── page.tsx               # Temp home page (Phase 1 skeleton)
 │   │       ├── (protected)/           # Route group — authenticated pages only
 │   │       │   ├── layout.tsx         # Session guard (getUser) + AppShell wrapper
-│   │       │   └── dashboard/
-│   │       │       └── page.tsx       # Dashboard placeholder (replaced in Phase 4)
+│   │       │   ├── dashboard/
+│   │       │   │   └── page.tsx       # Dashboard — Server Component (D-047)
+│   │       │   │                      # 0 leagues → empty state, 1 league → redirect,
+│   │       │   │                      # 2+ leagues → cards grid
+│   │       │   ├── draft/
+│   │       │   │   └── [draftId]/
+│   │       │   │       └── page.tsx   # Draft Room page — Server Component
+│   │       │   │                      # Fetches players + manager names server-side,
+│   │       │   │                      # passes currentUserId + data to DraftRoom (D-040)
+    │       │   ├── stats/
+    │       │   │   └── page.tsx           # Stats page — Server Component
+    │       │   │                          # TODO: resolve competition_id from active league
+    │       │   │                          # Passes competitionId to StatsPageClient
+│   │       │   └── league/
+│   │       │       └── [leagueId]/
+│   │       │           ├── leaderboard/
+│   │       │           │   └── page.tsx   # Leaderboard page — Server Component
+│   │       │           │                  # SSR fetch (revalidate: 60s), passes initialData
+│   │       │           │                  # to LeaderboardTable for Realtime hydration
+│   │       │           └── roster/
+│   │       │               └── page.tsx   # Roster page — Server Component
+│   │       │                              # Fetches current round server-side (revalidate: 60s)
+│   │       │                              # Passes leagueId + roundId to RosterManagement
 │   │       └── login/
 │   │           └── page.tsx           # Login page: split-screen brand + magic link form
 │   ├── components/
 │   │   ├── auth/
 │   │   │   └── LoginForm.tsx          # Magic link form — Client Component
+│   │   ├── draft/
+│   │   │   ├── DraftRoom.tsx          # Main orchestrator — mobile-first layout
+│   │   │   │                          # Sidebar desktop / bottom sheet mobile
+│   │   │   ├── DraftTimer.tsx         # Countdown with urgency colours + Framer Motion pulse
+│   │   │   │                          # Resyncs from server snapshot on each broadcast
+│   │   │   ├── DraftStatusBanner.tsx  # Contextual banner: your turn / waiting /
+│   │   │   │                          # autodraft / completed — animated with Framer Motion
+│   │   │   ├── DraftPlayerCard.tsx    # Single player card: available (button) /
+│   │   │   │                          # drafted / injured / suspended (div, non-interactive)
+│   │   │   ├── DraftPlayerList.tsx    # Filterable scrollable pool:
+│   │   │   │                          # text search + position chips, memoised sort
+│   │   │   ├── DraftOrderPanel.tsx    # Snake order upcoming slots + full pick history
+│   │   │   └── DraftPickConfirmModal.tsx  # Pick confirmation dialog:
+│   │   │                                  # focus trap, Escape key, Framer Motion
+│   │   ├── roster/
+│   │   │   ├── RosterManagement.tsx       # Main orchestrator — mobile tabs / desktop 3-col grid
+│   │   │   │                              # Swap flow: 2-click starter ↔ bench, updateLineup dispatch
+│   │   │   ├── RosterPlayerCard.tsx       # Player card atom: lock/captain/kicker/IR states
+│   │   │   │                              # Multi-position selector (locked at kick-off)
+│   │   │   ├── RosterSlotGrid.tsx         # 15 starter slots in jersey order, grouped by line
+│   │   │   ├── RosterBenchGrid.tsx        # Bench slots + coverage bar (CDC §6.2 minimums)
+│   │   │   ├── RosterIRPanel.tsx          # IR slots (max 3), reintegration CTA, blocking alert
+│   │   │   └── RosterCaptainKickerBar.tsx # Captain (×1.5) + kicker designation
+│   │   │                                  # Mobile: fixed bottom bar. Desktop: inline.
+│   │   ├── leaderboard/
+│   │   │   ├── LeaderboardTable.tsx       # Standings table orchestrator — loading/error/empty states
+│   │   │   │                              # Assembles useLeaderboard + LeaderboardRow
+│   │   │   └── LeaderboardRow.tsx         # Single row atom — medal icons (top 3), current user highlight
+│   │   │                                  # Framer Motion staggered entry animation
+│   │   ├── stats/
+│   │   │   ├── StatsPageClient.tsx        # Client Component shell — owns period + filter state
+│   │   │   │                              # Renders StatsFiltersBar + StatsTable
+│   │   │   ├── StatsFiltersBar.tsx        # Period tabs (1w/2w/4w/season), search input,
+│   │   │   │                              # position chips, pool status chips, club/nationality select
+│   │   │   └── StatsTable.tsx             # 4 column groups (points/attack/defence/discipline)
+│   │   │                                  # Sortable headers, sticky identity column, trend icons
+│   │   │                                  # Framer Motion row animations — scoring system v2 (D-039)
+│   │   ├── dashboard/
+│   │   │   ├── DashboardEmptyState.tsx    # Empty state — join/create CTAs (zero leagues)
+│   │   │   ├── DashboardAlertBadge.tsx    # Alert chip: injured/recovered/waiver/trade/AI
+│   │   │   └── DashboardLeagueCard.tsx    # League summary card: rank, score, alerts, draft CTA
 │   │   └── layout/
 │   │       ├── AppShell.tsx           # Layout wrapper: Sidebar + main + BottomNav
 │   │       ├── BottomNav.tsx          # Mobile fixed bottom nav — 5 items, Client Component
 │   │       └── Sidebar.tsx            # Desktop sticky sidebar — collapsible, Client Component
+│   ├── hooks/
+│   │   ├── useDraftRealtime.ts        # Supabase Realtime subscription + polling fallback
+│   │   │                              # Calls POST /connect on mount, POST /disconnect on unmount
+│   │   │                              # Polling every 5s when Realtime disconnected
+│   │   ├── useRosters.ts              # Roster + lineup fetch, coverage computation,
+│   │   │                              # lock status polling (30s), optimistic updates + rollback
+│   │   ├── useLeaderboard.ts          # Standings fetch + Supabase Realtime Postgres Changes
+│   │   │                              # Re-fetch strategy on CDC event, polling fallback 60s
+│   │   └── usePlayerStats.ts          # Stats fetch + mock (USE_MOCK flag) + client-side
+│   │                                  # filtering (D-044). Period triggers re-fetch;
+│   │                                  # position/club/search/pool filtered via useMemo.
 │   ├── i18n/
 │   │   ├── routing.ts                 # next-intl: supported locales, defaultLocale
 │   │   └── request.ts                 # next-intl: server-side locale resolution
-│   └── lib/
-│       └── supabase/
-│           ├── client.ts              # createBrowserSupabaseClient — Client Components
-│           └── server.ts              # createServerSupabaseClient — Server Components
-├── middleware.ts                       # next-intl routing + Supabase session refresh + route protection
+│   ├── lib/
+│   │   └── supabase/
+│   │       ├── client.ts              # createBrowserSupabaseClient — Client Components
+│   │       └── server.ts              # createServerSupabaseClient — Server Components
+│   └── types/
+│       ├── dashboard.ts               # DashboardResponse, DashboardLeague, DashboardAlert
+│       │                              # TypeScript mirror of FastAPI dashboard.py schemas
+│       ├── draft.ts                   # TypeScript mirror of FastAPI draft schemas
+│       │                              # DraftStateSnapshot, PickRecord, DraftUIState
+│       ├── leaderboard.ts             # StandingEntry, LeagueStandingsResponse
+│       │                              # TypeScript mirror of FastAPI leagues.py schemas
+│       ├── player.ts                  # TypeScript mirror of PlayerSummary (backend)
+│       └── roster.ts                  # RosterSlot, WeeklyLineupEntry, LineupUpdatePayload
+│                                      # RosterCoverageStatus, STARTER_POSITIONS, BENCH_COVERAGE_MINIMUMS
+├── proxy.ts                           # next-intl routing + Supabase session refresh
+│                                      # + route protection (renamed from middleware.ts — KB-002)
 ├── .env.example
 ├── next.config.ts
 └── tsconfig.json

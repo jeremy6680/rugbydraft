@@ -9,33 +9,34 @@ Run locally with:
     uvicorn app.main:app --reload --port 8000
 """
 
+import logging
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
+from supabase import acreate_client
+from supabase._async.client import AsyncClient
 
 from app.config import settings
 from app.middleware.auth import AuthMiddleware
-from app.routers import draft, draft_assisted, health, trades, waivers
-from app.routers.lineup import router as lineup_router
+from app.routers import draft, draft_assisted, health, leagues, trades, waivers
+from app.routers.dashboard import router as dashboard_router
 from app.routers.infirmary import router as infirmary_router
-
+from app.routers.lineup import router as lineup_router
+from app.routers.players import router as players_router
+from app.routers.stats import router as stats_router
 from draft.registry import DraftRegistry
 from infirmary.ir_scheduler import get_scheduler, register_ir_jobs
-
-from supabase._async.client import AsyncClient
-from supabase import acreate_client
 
 # ── Supabase client — module-level instance for scheduler ─────────────────────
 # Injected into APScheduler jobs at startup.
 # Request-scoped client (get_supabase_client) is used by routers instead.
-import logging
-
 supabase_client: AsyncClient | None = None
 
 # ── Rate limiter setup ────────────────────────────────────────────────────────
@@ -62,12 +63,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     Startup:
         - DraftRegistry: in-memory store of active DraftEngine instances.
-          All draft endpoints retrieve engines from here.
+        - Supabase async client for APScheduler IR jobs.
+        - APScheduler: registers and starts IR maintenance jobs.
 
     Shutdown:
-        - No explicit cleanup needed for the registry — active drafts are
-          in-memory only and do not require graceful teardown in V1.
-          (In production, consider persisting draft state to DB on shutdown.)
+        - APScheduler graceful shutdown.
     """
     global supabase_client
 
@@ -84,10 +84,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     register_ir_jobs(scheduler, supabase_client)
     scheduler.start()
     yield  # application runs here
+
     # Shutdown
     if scheduler.running:
         scheduler.shutdown()
-    # Shutdown (placeholder — no cleanup needed in V1)
 
 
 # ── FastAPI instance ──────────────────────────────────────────────────────────
@@ -107,7 +107,6 @@ app = FastAPI(
 )
 
 # ── Attach rate limiter to app state ──────────────────────────────────────────
-# slowapi requires the limiter to be on app.state.limiter
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -131,11 +130,66 @@ app.add_middleware(AuthMiddleware)
 app.include_router(health.router)
 app.include_router(draft.router)
 app.include_router(draft_assisted.router)
+app.include_router(leagues.router)
 app.include_router(trades.router)
 app.include_router(waivers.router)
 app.include_router(lineup_router)
 app.include_router(infirmary_router)
+app.include_router(players_router)
+app.include_router(stats_router)
+app.include_router(dashboard_router)
+
+# ── Custom OpenAPI schema — Bearer auth scheme for Swagger UI ─────────────────
+
+# Routes that are publicly accessible — no JWT required.
+# Must match exactly the paths registered in AuthMiddleware.PUBLIC_PATHS.
+_PUBLIC_PATHS = {"/health", "/openapi.json", "/docs", "/redoc"}
 
 
-# Phase 3: app.include_router(players.router, prefix="/players")
-# Phase 3: app.include_router(leagues.router, prefix="/leagues")
+def custom_openapi() -> dict[str, Any]:
+    """Override the default OpenAPI schema to inject BearerAuth security scheme.
+
+    Applies BearerAuth globally to all protected operations.
+    Public paths (listed in _PUBLIC_PATHS) are explicitly excluded.
+
+    The schema is generated once and cached on app.openapi_schema.
+    """
+    if app.openapi_schema:
+        return app.openapi_schema  # type: ignore[return-value]
+
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+
+    # Inject the HTTP Bearer security scheme into components
+    schema.setdefault("components", {})
+    schema["components"]["securitySchemes"] = {
+        "BearerAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": (
+                "Supabase JWT — obtain via supabase.auth.getSession() "
+                "or the magic-link flow. Paste the access_token value here."
+            ),
+        }
+    }
+
+    # Apply BearerAuth to all operations except public paths
+    for path, path_item in schema.get("paths", {}).items():
+        for operation in path_item.values():
+            if isinstance(operation, dict):
+                if path in _PUBLIC_PATHS:
+                    # Explicitly mark public routes as requiring no auth
+                    operation["security"] = []
+                else:
+                    operation.setdefault("security", [{"BearerAuth": []}])
+
+    app.openapi_schema = schema
+    return schema  # type: ignore[return-value]
+
+
+app.openapi = custom_openapi  # type: ignore[method-assign]

@@ -634,9 +634,18 @@ class DSGConnector(BaseRugbyConnector):
             kick_assists=self._int_attr(people_el, "try_kicks") or None,
             line_breaks=self._int_attr(people_el, "line_breaks") or None,
             catch_from_kick=self._int_attr(people_el, "catch_from_kick") or None,
+            # D-050: off_loads — DSG attr confirmed with underscore (not "offloads").
+            # Previously missing → silently returned 0 for all players. Fixed here.
+            off_loads=self._int_attr(people_el, "off_loads") or None,
             # --- Kicker ---
             conversions_made=conversion_goals,
             penalties_made=penalties_made,
+            # D-050: missed kicks — DSG native attributes, no computation needed.
+            # Scored only when player is designated kicker (kicker_flag applied in dbt).
+            missed_conversion_goals=self._int_attr(people_el, "missed_conversion_goals")
+            or None,
+            missed_penalty_goals=self._int_attr(people_el, "missed_penalty_goals")
+            or None,
             # --- Defence ---
             tackles=self._int_attr(people_el, "tackles") or None,
             turnovers_won=self._int_attr(people_el, "turnover_won") or None,

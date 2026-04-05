@@ -1,7 +1,7 @@
 # NEXT_STEPS.md — RugbyDraft
 
-> Current status: Phase 4 in progress — Stats page started (gold model done).
-> Last updated: 2026-04-02
+> Current status: Phase 4 in progress — feat/scoring-d050 complete, ready for Phase 4 PR.
+> Last updated: 2026-04-05
 
 ---
 
@@ -381,13 +381,9 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 
 ## Immediate next actions
 
-**→ Phase 4 in progress:** Draft Room ✅ Roster ✅ Leaderboard ✅ Stats page ✅ Dashboard ✅ Swagger UI ✅ — next: `feat/scoring-d050`, then Phase 4 PR
+**→ Phase 4 in progress:** Draft Room ✅ Roster ✅ Leaderboard ✅ Stats page ✅ Dashboard ✅ Swagger UI ✅ feat/scoring-d050 ✅ — next: Phase 4 PR
 
-**→ Next session (priority 1):** `feat/scoring-d050` branch (from `phase/4-frontend`):
-implement D-050 scoring additions — fix `off_loads` bug, add `offloads` (+1),
-`missed_conversion_goals` (-0.5 kicker), `missed_penalty_goals` (-1 kicker)
-in `connectors/base.py`, `connectors/dsg.py`, `mart_fantasy_points.sql`,
-`mart_player_stats_ui.sql`. Merge back into `phase/4-frontend` before Phase 4 PR.
+**→ Next session (priority 1):** open Phase 4 PR — merge `phase/4-frontend` into `main`.
 
 **→ Phase 1 remaining:** Cron Coolify config (after first deploy to Hetzner)
 

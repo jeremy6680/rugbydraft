@@ -137,6 +137,8 @@ player_round_stats as (
         coalesce(ms.kick_assists::integer,       0)  as kick_assists,
         coalesce(ms.line_breaks::integer,        0)  as line_breaks,
         coalesce(ms.catch_from_kick::integer,    0)  as catch_from_kick,
+        -- D-050: off_loads — all players, +1 pt each
+        coalesce(ms.off_loads::integer,          0)  as off_loads,
         -- Kicker stats: shown raw for all players (no kicker_flag here)
         coalesce(ms.conversions_made::integer,   0)  as conversions_made,
         coalesce(ms.penalties_made::integer,     0)  as penalties_made,
@@ -218,6 +220,8 @@ current_period_stats as (
         sum(prs.kick_assists)::integer                     as kick_assists,
         sum(prs.line_breaks)::integer                      as line_breaks,
         sum(prs.catch_from_kick)::integer                  as catch_from_kick,
+        -- D-050
+        sum(prs.off_loads)::integer                        as off_loads,
         -- Kicker stats (raw — kicker_flag not applied here)
         sum(prs.conversions_made)::integer                 as conversions_made,
         sum(prs.penalties_made)::integer                   as penalties_made,
@@ -326,6 +330,7 @@ final as (
         cp.kick_assists,
         cp.line_breaks,
         cp.catch_from_kick,
+        cp.off_loads,
         cp.conversions_made,
         cp.penalties_made,
 
@@ -397,6 +402,7 @@ select
     kick_assists,
     line_breaks,
     catch_from_kick,
+    off_loads,
     conversions_made,
     penalties_made,
 

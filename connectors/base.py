@@ -145,16 +145,18 @@ class PlayerMatchStats(BaseModel):
     Individual player statistics for a single match.
     Used by post_match_pipeline to calculate fantasy points.
 
-    Scoring system v2 (D-039):
+    Scoring system v3 (D-050):
         Attack:  metres (+0.1/m), try_assists (+2), tries (+5),
                  kick_assists (+1), line_breaks (+1),
-                 catch_from_kick (+0.5),
+                 catch_from_kick (+0.5), off_loads (+1),
                  conversions_made (+2, kicker only),
                  penalties_made (+3, kicker only)
         Defence: tackles (+0.5), turnovers_won (+2),
                  lineouts_won (+1, thrower), lineouts_lost (-0.5, thrower),
                  turnovers_conceded (-0.5), missed_tackles (-0.5),
                  handling_errors (-0.5), penalties_conceded (-1),
+                 missed_conversion_goals (-0.5, kicker only),
+                 missed_penalty_goals (-1, kicker only),
                  yellow_cards (-2), red_cards (-3)
 
     DSG field notes:
@@ -164,10 +166,14 @@ class PlayerMatchStats(BaseModel):
         - conversion_goals: conversions made only
         - penalties_made derived in connector: goals - conversion_goals
         - kick_assists: DSG field try_kicks (kick leading directly to a try)
+        - off_loads: DSG attribute off_loads (pass after contact) — D-050
+        - missed_conversion_goals: DSG attribute missed_conversion_goals — D-050
+        - missed_penalty_goals: DSG attribute missed_penalty_goals — D-050
 
     Conditional stats (may be None if provider does not supply):
         line_breaks, catch_from_kick, lineouts_won, lineouts_lost,
-        kick_assists, handling_errors, turnovers_conceded
+        kick_assists, handling_errors, turnovers_conceded,
+        off_loads, missed_conversion_goals, missed_penalty_goals
         → dbt uses COALESCE(stat, 0) — they score 0 if absent.
     """
 
@@ -201,11 +207,30 @@ class PlayerMatchStats(BaseModel):
         default=None,
         description="Catches under kick. +0.5 pt each.",
     )
+    off_loads: int | None = Field(
+        default=None,
+        description="Offloads (passes after contact). +1 pt each. DSG attr: off_loads. D-050.",
+    )
 
     # Kicker stats — scored only if player is designated kicker in the roster.
     # Kicker designation is managed in FastAPI/PostgreSQL, not in dbt.
     conversions_made: int = Field(default=0, ge=0)
     penalties_made: int = Field(default=0, ge=0)
+    # Missed kicks — kicker only, negative scoring. D-050.
+    missed_conversion_goals: int | None = Field(
+        default=None,
+        description=(
+            "Conversions missed. -0.5 pt (kicker only). "
+            "DSG attr: missed_conversion_goals. D-050."
+        ),
+    )
+    missed_penalty_goals: int | None = Field(
+        default=None,
+        description=(
+            "Penalty kicks missed. -1 pt (kicker only). "
+            "DSG attr: missed_penalty_goals. D-050."
+        ),
+    )
 
     # --- Defence stats ---
     tackles: int | None = None

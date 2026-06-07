@@ -17,6 +17,8 @@ rugbydraft/
 ├── docs/                  # Technical docs (CDC gitignored)
 ├── frontend/              # Next.js 15 — created in Phase 4
 ├── scripts/               # Utility and validation scripts
+├── docker-compose.yml     # Production orchestration — backend + frontend on shared bridge network
+│                          # Managed by Coolify; Traefik handles HTTPS + subdomains
 ├── CONTEXT.md             # Project overview, stack, key decisions summary
 ├── DECISIONS.md           # Architectural decisions log
 ├── NEXT_STEPS.md          # Phase-by-phase task checklist
@@ -38,6 +40,31 @@ GitHub Actions CI/CD pipelines.
 | `ci-dbt.yml`      | Push / PR | dbt test (silver layer)                        |
 
 > Draft engine tests and scoring tests are mandatory — PRs cannot be merged if they fail.
+
+---
+
+## Deployment (D-051)
+
+Production stack runs on Hetzner CPX21 (Ubuntu 24.04) via Coolify.
+
+| File                       | Purpose                                              |
+| -------------------------- | ---------------------------------------------------- |
+| `docker-compose.yml`       | Root Compose stack — backend + frontend services     |
+| `backend/Dockerfile`       | Multi-stage Python 3.13 image, 2 Uvicorn workers     |
+| `backend/.dockerignore`    | Excludes venv, tests, dev deps from image            |
+| `frontend/Dockerfile`      | Multi-stage Node 22 image, Next.js standalone output |
+| `frontend/.dockerignore`   | Excludes node_modules, .next, .env from image        |
+| `.github/workflows/cd.yml` | POSTs to Coolify webhook on push to main             |
+
+**Subdomains:**
+
+- `rugbydraft.app` → frontend container (port 3000)
+- `api.rugbydraft.app` → backend container (port 8000)
+
+**Internal routing:**
+Next.js Server Components call the backend via `INTERNAL_API_URL=http://backend:8000`
+(Docker bridge network — never through public internet).
+Browser calls use `NEXT_PUBLIC_API_URL=https://api.rugbydraft.app`.
 
 ---
 

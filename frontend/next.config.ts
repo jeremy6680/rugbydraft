@@ -8,6 +8,13 @@ import createNextIntlPlugin from "next-intl/plugin";
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 /** @type {import('next').NextConfig} */
-const nextConfig = {};
+const nextConfig = {
+  // output: 'standalone' produces a self-contained bundle for Docker deployment.
+  // The .next/standalone directory includes only what's needed to run the server,
+  // reducing the final Docker image from ~1 GB to ~150 MB.
+  // 'as const' is required — without it TypeScript infers type 'string' instead
+  // of the literal type '"standalone"', which causes a type error with NextConfig.
+  output: "standalone" as const,
+};
 
 export default withNextIntl(nextConfig);

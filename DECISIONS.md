@@ -1869,3 +1869,67 @@ a silent zero-read. Fixed in this decision's implementation.
   add `offload_pts`, `missed_conversion_pts`, `missed_penalty_pts` to breakdown
 - `dbt_project/models/gold/mart_player_stats_ui.sql` — add `offloads` to display stats
 - `CONTEXT.md` — update scoring summary section
+
+---
+
+## D-051 — Production deployment: Docker Compose on Hetzner CPX21 via Coolify
+
+**Date:** 2026-06-07
+**Status:** Accepted
+
+**Context:** Phase 4 frontend is complete and merged into main. The next
+milestone before the Ulule campaign is a live production deployment at
+rugbydraft.app. The Hetzner CPX21 VPS (2 vCPU, 8 GB RAM, Ubuntu 24.04)
+is provisioned and Coolify is already installed.
+
+**Options considered:**
+
+- A) Individual Coolify services — frontend and backend configured as
+  separate services in the Coolify UI, each with its own build config.
+- B) Docker Compose managed by Coolify — a single docker-compose.yml at
+  the repo root, read by Coolify as a Compose stack.
+
+**Decision:** Option B — docker-compose.yml at repo root, managed by Coolify.
+
+**Rationale:**
+
+- Frontend Server Components call the backend server-side. With a shared
+  Docker bridge network (rugbydraft-network), frontend reaches backend via
+  http://backend:8000 — never through the public internet. This eliminates
+  latency, avoids egress costs, and removes a public attack surface.
+- A single Compose stack is one deploy unit: one webhook, one rollback,
+  one place to reason about the full system.
+- Reproductible locally with docker compose up --build.
+- Individual services (Option A) would require exposing the backend port
+  publicly or using Coolify-specific networking features — less portable.
+
+**Architecture:**
+
+- rugbydraft.app → frontend (Next.js :3000) via Traefik
+- api.rugbydraft.app → backend (FastAPI :8000) via Traefik
+- HTTPS + Let's Encrypt managed by Coolify/Traefik automatically
+- CD: GitHub Actions POSTs to Coolify webhook on push to main
+
+**NEXT*PUBLIC* build args:**
+
+Next.js bakes NEXT*PUBLIC* variables into the client bundle at build time.
+They must be passed as Docker build args (not just runtime env vars).
+Coolify injects them via the Build Variables section of the service config.
+
+**INTERNAL_API_URL:**
+
+Server Components use INTERNAL_API_URL=http://backend:8000 for server-side
+fetch calls. This env var is runtime-only (not baked at build time) and
+routes through the internal Docker network.
+
+**Consequences:**
+
+- All NEXT*PUBLIC* vars must be set in Coolify as both Build Variables AND
+  Environment Variables (Coolify passes build args from env vars automatically
+  if configured correctly — verify in Coolify UI).
+- The CD workflow (.github/workflows/cd.yml) requires two GitHub secrets:
+  COOLIFY_WEBHOOK_URL and COOLIFY_WEBHOOK_TOKEN.
+- Airflow and DuckDB/dbt pipeline are deferred to Phase 5 — they require
+  persistent volumes and a separate Compose service.
+- The CD workflow triggers on every push to main regardless of CI status.
+  A future improvement would use workflow_run to block deploys if CI fails.

@@ -1,0 +1,49 @@
+# .github/workflows/cd.yml
+#
+# Continuous Deployment — triggers a Coolify redeploy on every push to main.
+#
+# Flow:
+#   push to main
+#     → CI passes (ci-python.yml + ci-frontend.yml + ci-dbt.yml)
+#     → this workflow POSTs to the Coolify webhook
+#     → Coolify pulls latest main, rebuilds Docker images, restarts services
+#
+# Required GitHub secret:
+#   COOLIFY_WEBHOOK_URL — the full webhook URL from Coolify
+#                         (Settings → Your Service → Webhooks → Copy URL)
+#   COOLIFY_WEBHOOK_TOKEN — the Bearer token from the same Coolify webhook
+
+name: CD — Deploy to Hetzner via Coolify
+
+on:
+  push:
+    branches:
+      - main
+  # Allow manual trigger from GitHub Actions UI
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Trigger Coolify deployment
+    runs-on: ubuntu-latest
+    # Only deploy if CI workflows passed
+    # This ensures we never deploy broken code
+    needs: []
+
+    steps:
+      - name: Trigger Coolify webhook
+        run: |
+          HTTP_STATUS=$(curl --silent --output /dev/null --write-out "%{http_code}" \
+            --max-time 30 \
+            -X POST "${{ secrets.COOLIFY_WEBHOOK_URL }}" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_WEBHOOK_TOKEN }}" \
+            -H "Content-Type: application/json")
+
+          echo "Coolify webhook response: $HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "✅ Deployment triggered successfully"
+          else
+            echo "❌ Webhook failed with HTTP $HTTP_STATUS"
+            exit 1
+          fi

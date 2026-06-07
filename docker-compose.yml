@@ -1,0 +1,102 @@
+# docker-compose.yml — RugbyDraft production orchestration
+#
+# Usage:
+#   Local dev:   docker compose up --build
+#   Production:  managed by Coolify (reads this file, injects env vars, adds Traefik labels)
+#
+# Architecture:
+#   frontend (Next.js :3000) ──► backend (FastAPI :8000)  [internal network]
+#        │                              │
+#        └──────────────────────────────┘
+#              rugbydraft-network (bridge)
+#
+# Traefik (managed by Coolify) sits in front and handles:
+#   - rugbydraft.app       → frontend:3000
+#   - api.rugbydraft.app   → backend:8000
+#   - HTTPS / Let's Encrypt certificates
+
+services:
+  # ── Backend — FastAPI draft authority ────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: rugbydraft-backend:latest
+    container_name: rugbydraft-backend
+    restart: unless-stopped
+    networks:
+      - rugbydraft-network
+    environment:
+      # Supabase — injected by Coolify at runtime, never committed
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      # Database
+      DATABASE_URL: ${DATABASE_URL}
+      # Scheduler
+      WAIVER_SCHEDULER_SECRET: ${WAIVER_SCHEDULER_SECRET}
+      # CORS — frontend origin allowed to call the API
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://rugbydraft.app}
+      # DSG data provider
+      DSG_CLIENT: ${DSG_CLIENT:-}
+      DSG_AUTHKEY: ${DSG_AUTHKEY:-}
+      DSG_USERNAME: ${DSG_USERNAME:-}
+      DSG_PASSWORD: ${DSG_PASSWORD:-}
+      # Environment flag
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+        ]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
+    # Port not exposed to host in production — Traefik routes directly via network
+    # Uncomment for local testing:
+    # ports:
+    #   - "8000:8000"
+
+  # ── Frontend — Next.js App Router ────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_ vars are baked into the client bundle at build time
+        # They must be passed as build args, not just runtime env vars
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.rugbydraft.app}
+    image: rugbydraft-frontend:latest
+    container_name: rugbydraft-frontend
+    restart: unless-stopped
+    networks:
+      - rugbydraft-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      # Runtime env vars for Next.js Server Components (server-side fetch)
+      # Uses internal Docker network — never goes through the public internet
+      INTERNAL_API_URL: http://backend:8000
+      # next-intl / app config
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.rugbydraft.app}
+      NODE_ENV: production
+    # Port not exposed to host in production — Traefik routes directly via network
+    # Uncomment for local testing:
+    # ports:
+    #   - "3000:3000"
+
+# ── Shared network ────────────────────────────────────────────────────────
+networks:
+  rugbydraft-network:
+    driver: bridge
+    name: rugbydraft-network

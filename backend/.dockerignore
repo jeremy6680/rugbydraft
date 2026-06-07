@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.venv/
+.venv-airflow/
+*.egg-info/
+dist/
+.env
+.env.*
+!.env.example
+requirements-dev.txt
+tests/
+*.md

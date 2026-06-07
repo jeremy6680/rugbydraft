@@ -315,7 +315,15 @@
   - [ ] TODO: next_opponent field (deferred — requires schedule query)
 - [x] Swagger UI — Bearer auth scheme (`custom_openapi` in `main.py`, public paths excluded)
 - [ ] Season archive page — past results per league
-- [ ] Deploy to Hetzner via Coolify: `rugbydraft.app` live with HTTPS
+- [~] Deploy to Hetzner via Coolify: `rugbydraft.app` live with HTTPS
+  - [x] backend/Dockerfile + .dockerignore
+  - [x] frontend/Dockerfile + .dockerignore
+  - [x] frontend/next.config.ts — output: standalone
+  - [x] docker-compose.yml (root) — shared bridge network, INTERNAL_API_URL
+  - [x] .github/workflows/cd.yml — Coolify webhook on push to main
+  - [ ] Configure Coolify: create stack, set env vars, set subdomains
+  - [ ] Trigger first deploy, verify rugbydraft.app + api.rugbydraft.app live
+  - [ ] Add COOLIFY_WEBHOOK_URL + COOLIFY_WEBHOOK_TOKEN to GitHub Secrets
 - [ ] Full axe-core accessibility audit — WCAG 2.1 AA
 - [ ] Core Web Vitals: FCP < 1s, total load < 2s
 - [ ] Lighthouse ≥ 90
@@ -381,9 +389,15 @@ See `docs/ulule_campaign.md` for the full campaign draft.
 
 ## Immediate next actions
 
-**→ Phase 4 in progress:** Draft Room ✅ Roster ✅ Leaderboard ✅ Stats page ✅ Dashboard ✅ Swagger UI ✅ feat/scoring-d050 ✅ — next: Phase 4 PR
+**→ In progress:** feat/docker-deploy branch — Docker infra complete, pending Coolify config.
 
-**→ Next session (priority 1):** open Phase 4 PR — merge `phase/4-frontend` into `main`.
+**→ Next session (priority 1):** Configure Coolify stack on Hetzner:
+
+1. Create new Compose stack in Coolify → point to jeremy6680/rugbydraft
+2. Set all environment variables (see D-051 + .env.example)
+3. Set subdomains: rugbydraft.app → frontend, api.rugbydraft.app → backend
+4. Add COOLIFY_WEBHOOK_URL + COOLIFY_WEBHOOK_TOKEN to GitHub Secrets
+5. Merge feat/docker-deploy → main → first automated deploy
 
 **→ Phase 1 remaining:** Cron Coolify config (after first deploy to Hetzner)
 

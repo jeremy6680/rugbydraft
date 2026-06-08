@@ -321,11 +321,10 @@
   - [x] frontend/next.config.ts — output: standalone
   - [x] docker-compose.yml (root) — shared bridge network, INTERNAL_API_URL
   - [x] .github/workflows/cd.yml — Coolify webhook on push to main
-  - [ ] Configure Coolify: create stack, set env vars, set subdomains
-  - [ ] Trigger first deploy, verify rugbydraft.app + api.rugbydraft.app live
-  - [ ] Add COOLIFY_WEBHOOK_URL + COOLIFY_WEBHOOK_TOKEN to GitHub Secrets
+  - [x] Configure Coolify: create stack, set env vars, set subdomains
+  - [x] Trigger first deploy, verify rugbydraft.app + api.rugbydraft.app live
 - [ ] Full axe-core accessibility audit — WCAG 2.1 AA
-- [ ] Core Web Vitals: FCP < 1s, total load < 2s
+- [ ] Core Web Vitals: FCP less than 1s, total load less than 2s
 - [ ] Lighthouse ≥ 90
 
 ---

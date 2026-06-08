@@ -1933,3 +1933,29 @@ routes through the internal Docker network.
   persistent volumes and a separate Compose service.
 - The CD workflow triggers on every push to main regardless of CI status.
   A future improvement would use workflow_run to block deploys if CI fails.
+
+---
+
+## D-052 — Auth callback: use NEXT_PUBLIC_APP_URL instead of request.url origin
+
+**Date:** 2026-06-08
+**Status:** Accepted
+
+**Context:** Behind Traefik reverse proxy, Next.js standalone sees
+request.url with internal container address (http://0.0.0.0:3000)
+instead of the public domain. Using `origin` from `new URL(request.url)`
+in the auth callback route caused Supabase to redirect to
+http://0.0.0.0:3000/fr/dashboard after magic link authentication.
+
+**Decision:** Use `process.env.NEXT_PUBLIC_APP_URL` as the base URL
+for all redirects in the auth callback route. Fallback to
+`https://rugbydraft.app` if the variable is not set.
+
+**Rationale:** The public URL is a deployment concern, not something
+that should be derived from the incoming request when behind a proxy.
+NEXT_PUBLIC_APP_URL is set in Coolify environment variables.
+
+**Consequences:**
+
+- NEXT_PUBLIC_APP_URL must be set in all deployment environments.
+- Local dev: add NEXT_PUBLIC_APP_URL=http://localhost:3000 to .env.local.

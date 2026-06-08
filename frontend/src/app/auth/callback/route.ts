@@ -16,21 +16,21 @@ import { NextRequest, NextResponse } from "next/server";
  * It is excluded from the next-intl middleware matcher explicitly.
  */
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
-
+  const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/fr/dashboard";
 
+  // Use the public app URL — never derive origin from request.url
+  // behind a reverse proxy (Traefik), request.url contains the internal
+  // container address (0.0.0.0:3000), not the public domain.
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://rugbydraft.app";
+
   if (!code) {
-    // No code in URL — something went wrong upstream.
-    return NextResponse.redirect(`${origin}/fr/login?error=no_code`);
+    return NextResponse.redirect(`${appUrl}/fr/login?error=no_code`);
   }
 
-  // Build the redirect response first — we will write cookies onto it.
-  const redirectResponse = NextResponse.redirect(`${origin}${next}`);
-
+  const redirectResponse = NextResponse.redirect(`${appUrl}${next}`);
   const cookieStore = await cookies();
-
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -39,8 +39,6 @@ export async function GET(request: NextRequest) {
         getAll() {
           return cookieStore.getAll();
         },
-        // Write session cookies directly onto the redirect response —
-        // this guarantees the browser receives them with the 302 redirect.
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
             redirectResponse.cookies.set(name, value, options);
@@ -51,16 +49,13 @@ export async function GET(request: NextRequest) {
   );
 
   const { error } = await supabase.auth.exchangeCodeForSession(code);
-
   if (error) {
     console.error(
       "[auth/callback] exchangeCodeForSession error:",
       error.message,
     );
-    return NextResponse.redirect(`${origin}/fr/login?error=auth_failed`);
+    return NextResponse.redirect(`${appUrl}/fr/login?error=auth_failed`);
   }
 
-  // Session cookies are now on redirectResponse — the browser will store them
-  // and the middleware will find them on the next request to /fr/dashboard.
   return redirectResponse;
 }
